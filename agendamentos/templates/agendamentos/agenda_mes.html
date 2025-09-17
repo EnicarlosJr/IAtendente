@@ -1,0 +1,94 @@
+{% extends "painel/base.html" %}
+{% block title %}Agenda — Mês{% endblock %}
+{% block header %}Agenda{% endblock %}
+
+{% block content %}
+{% include "agendamentos/_agenda_tabs.html" %}
+
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+
+  <!-- Cabeçalho -->
+  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+    <div class="font-semibold">{{ ref_date|date:"F Y" }}</div>
+    <div class="flex gap-2">
+      <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+         href="{% url 'agendamentos:agenda_mes' %}?data={{ prev_month|date:'Y-m-d' }}">← Anterior</a>
+      <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+         href="{% url 'agendamentos:agenda_mes' %}?data={{ next_month|date:'Y-m-d' }}">Próximo →</a>
+    </div>
+  </div>
+
+  <!-- Labels dos dias da semana -->
+  <div class="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
+    {% for label in dias_semana %}
+      <div class="text-center text-xs font-medium text-gray-600 py-2">{{ label }}</div>
+    {% endfor %}
+  </div>
+
+  <!-- Grade do mês -->
+  <div class="grid grid-cols-7 gap-px bg-gray-200">
+    {# Células em branco antes do dia 1 (vêm prontas da view) #}
+    {% for _ in blank_cells %}
+      <div class="bg-white min-h-[110px]"></div>
+    {% endfor %}
+
+    {# Dias do mês, em ordem #}
+    {% for dia, items in por_dia.items %}
+      <div class="bg-white min-h-[110px] p-2">
+        <div class="flex items-center justify-between">
+          <div class="text-xs text-gray-500">
+            <a href="{% url 'agendamentos:agenda_dia' %}?dia={{ dia|date:'Y-m-d' }}"
+               class="hover:underline">{{ dia|date:"d" }}</a>
+          </div>
+          {% if items %}
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">{{ items|length }}</span>
+          {% endif %}
+        </div>
+
+        <ul class="mt-1 space-y-1">
+          {% for ag in items %}
+            <li class="text-xs rounded border border-gray-200 px-2 py-1">
+              <span class="font-medium">
+                {% if ag.inicio %}{{ ag.inicio|date:"H:i" }}{% else %}--:--{% endif %}
+              </span>
+              ·
+              {# Nome do cliente: cliente.nome -> cliente_nome -> nome -> telefone -> "—" #}
+              {% if ag.cliente and ag.cliente.nome %}
+                {{ ag.cliente.nome }}
+              {% elif ag.cliente_nome %}
+                {{ ag.cliente_nome }}
+              {% elif ag.nome %}
+                {{ ag.nome }}
+              {% elif ag.telefone %}
+                {{ ag.telefone }}
+              {% else %}
+                —
+              {% endif %}
+
+              {# Serviço (opcional) #}
+              {% if ag.servico and ag.servico.nome %}
+                <span class="text-gray-600">· {{ ag.servico.nome }}</span>
+              {% elif ag.servico %}
+                <span class="text-gray-600">· {{ ag.servico }}</span>
+              {% endif %}
+
+              {# Status #}
+              {% with st=ag.status|stringformat:"s" %}
+              <span class="ml-1 inline-block align-middle text-[10px] px-1.5 py-0.5 rounded-full
+                {% if st == 'CONFIRMADA' or st == 'CONFIRMADO' %} bg-emerald-100 text-emerald-700
+                {% elif st == 'PENDENTE' %}                         bg-amber-100 text-amber-700
+                {% elif st == 'NEGADA' or st == 'CANCELADA' %}      bg-rose-100 text-rose-700
+                {% else %}                                           bg-gray-100 text-gray-700 {% endif %}">
+                {{ st }}
+              </span>
+              {% endwith %}
+            </li>
+          {% empty %}
+            {# sem itens: deixa só o número do dia #}
+          {% endfor %}
+        </ul>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

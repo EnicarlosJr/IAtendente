@@ -1,0 +1,143 @@
+{% extends "painel/base.html" %}
+{% load l10n %}
+{% block title %}Tabela de valores{% endblock %}
+{% block header %}Tabela de valores{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-6 space-y-4">
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+    <form method="get" class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div class="flex gap-2 w-full md:max-w-2xl">
+        <input type="text" name="q" value="{{ filters.q|default_if_none:'' }}"
+               class="w-full rounded-xl border px-3 py-2" placeholder="Buscar serviço">
+        <select name="status" class="rounded-xl border px-3 py-2">
+          <option value="ativos"   {% if filters.status == 'ativos' %}selected{% endif %}>Ativos</option>
+          <option value="inativos" {% if filters.status == 'inativos' %}selected{% endif %}>Inativos</option>
+          <option value="todos"    {% if filters.status == 'todos' %}selected{% endif %}>Todos</option>
+        </select>
+        <select name="categoria" class="rounded-xl border px-3 py-2">
+          <option value="">Todas categorias</option>
+          <option value="corte"   {% if filters.categoria == 'corte' %}selected{% endif %}>Corte</option>
+          <option value="barba"   {% if filters.categoria == 'barba' %}selected{% endif %}>Barba</option>
+          <option value="combo"   {% if filters.categoria == 'combo' %}selected{% endif %}>Combo</option>
+          <option value="quimica" {% if filters.categoria == 'quimica' %}selected{% endif %}>Química/Coloração</option>
+          <option value="add_on"  {% if filters.categoria == 'add_on' %}selected{% endif %}>Adicionais</option>
+        </select>
+        <select name="order" class="rounded-xl border px-3 py-2">
+          <option value="nome"    {% if filters.order == 'nome' %}selected{% endif %}>Ordenar: Nome</option>
+          <option value="duracao" {% if filters.order == 'duracao' %}selected{% endif %}>Ordenar: Duração</option>
+          <option value="preco"   {% if filters.order == 'preco' %}selected{% endif %}>Ordenar: Preço</option>
+        </select>
+        <button class="rounded-xl px-4 py-2 bg-black text-white">Filtrar</button>
+      </div>
+
+      <div class="flex gap-2">
+        <a href="{% url 'servicos:novo' %}"
+           class="rounded-xl px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-700">Novo serviço</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="bg-white rounded-2xl border overflow-hidden">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 text-left">
+        <tr>
+          <th class="px-4 py-3 font-semibold">Serviço</th>
+          <th class="px-4 py-3 font-semibold">Categoria</th>
+          <th class="px-4 py-3 font-semibold">Duração</th>
+          <th class="px-4 py-3 font-semibold">Preço</th>
+          <th class="px-4 py-3 font-semibold">Status</th>
+          <th class="px-4 py-3 font-semibold text-right">Ações</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y">
+        {% for s in servicos %}
+          <tr id="row-{{ s.id }}" class="hover:bg-gray-50">
+            <td class="px-4 py-3">
+              <a href="{% url 'servicos:detalhe' s.id %}" class="font-medium text-gray-900 hover:underline">
+                {{ s.nome }}
+              </a>
+            </td>
+            <td class="px-4 py-3">{{ s.get_categoria_display }}</td>
+            <td class="px-4 py-3">{{ s.duracao_min }} min</td>
+            <td class="px-4 py-3">R$ {{ s.preco|floatformat:2|localize }}</td>
+            <td class="px-4 py-3">
+              <span id="pill-{{ s.id }}" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs
+                {% if s.ativo %} bg-emerald-100 text-emerald-700 {% else %} bg-gray-100 text-gray-600 {% endif %}">
+                ● {% if s.ativo %}Ativo{% else %}Inativo{% endif %}
+              </span>
+            </td>
+            <td class="px-4 py-3">
+              <div class="flex justify-end gap-2">
+                <a href="{% url 'servicos:editar' s.id %}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Editar</a>
+                <button type="button" class="rounded-xl px-3 py-1.5
+                        {% if s.ativo %} bg-amber-600 text-white hover:bg-amber-700 {% else %} border hover:bg-gray-50 {% endif %}"
+                        onclick="toggleAtivo({{ s.id }})">
+                  {% if s.ativo %}Desativar{% else %}Ativar{% endif %}
+                </button>
+              </div>
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhum serviço cadastrado.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj and page_obj.paginator.num_pages > 1 %}
+  <div class="mt-4 flex items-center justify-between">
+    <div class="text-sm text-gray-600">
+      Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} · {{ page_obj.paginator.count }} registros
+    </div>
+    <div class="flex items-center gap-2">
+      {% if page_obj.has_previous %}
+        <a class="rounded-xl border px-3 py-1.5 hover:bg-gray-50"
+           href="?q={{ filters.q }}&status={{ filters.status }}&categoria={{ filters.categoria }}&order={{ filters.order }}&page={{ page_obj.previous_page_number }}">Anterior</a>
+      {% else %}
+        <span class="rounded-xl border px-3 py-1.5 text-gray-400">Anterior</span>
+      {% endif %}
+      {% if page_obj.has_next %}
+        <a class="rounded-xl border px-3 py-1.5 hover:bg-gray-50"
+           href="?q={{ filters.q }}&status={{ filters.status }}&categoria={{ filters.categoria }}&order={{ filters.order }}&page={{ page_obj.next_page_number }}">Próxima</a>
+      {% else %}
+        <span class="rounded-xl border px-3 py-1.5 text-gray-400">Próxima</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+  function getCSRFCookie() {
+    const name = 'csrftoken=';
+    const parts = document.cookie.split(';');
+    for (let c of parts) { c = c.trim(); if (c.indexOf(name) === 0) return c.substring(name.length); }
+    const el = document.querySelector('input[name=csrfmiddlewaretoken]');
+    return el ? el.value : '';
+  }
+  async function toggleAtivo(id) {
+    const url = "{% url 'servicos:toggle_ativo' 0 %}".replace('/0/', `/${id}/`);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {'X-CSRFToken': getCSRFCookie(), 'X-Requested-With': 'XMLHttpRequest'}
+    });
+    if (!res.ok) { alert('Falha ao alternar status.'); return; }
+    const j = await res.json();
+    const pill = document.getElementById(`pill-${id}`);
+    const rowBtn = document.querySelector(`#row-${id} button`);
+    if (j.ativo) {
+      pill.className = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs bg-emerald-100 text-emerald-700";
+      pill.textContent = "● Ativo";
+      rowBtn.className = "rounded-xl px-3 py-1.5 bg-amber-600 text-white hover:bg-amber-700";
+      rowBtn.textContent = "Desativar";
+    } else {
+      pill.className = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-600";
+      pill.textContent = "● Inativo";
+      rowBtn.className = "rounded-xl px-3 py-1.5 border hover:bg-gray-50";
+      rowBtn.textContent = "Ativar";
+    }
+  }
+</script>
+{% endblock %}

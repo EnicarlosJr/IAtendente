@@ -1,0 +1,493 @@
+{% extends "painel/base.html" %}
+{% load static %}
+{% block title %}{{ title|default:"Solicitações" }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-6">
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <div class="text-sm font-semibold text-gray-800 mb-2">Alertas</div>
+      <ul class="text-sm space-y-2">
+        <li>🔔 {{ alertas.sem_confirmacao|default:0 }} clientes sem confirmação</li>
+        <li>⏱️ {{ alertas.inativos_30d|default:0 }} clientes inativos há +30 dias</li>
+        <li>📅 {{ alertas.solicitacoes_pendentes|default:0 }} solicitações pendentes</li>
+      </ul>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:col-span-2">
+      <div class="flex items-center justify-between gap-2">
+        <h1 class="text-lg font-semibold">Solicitações</h1>
+        <form method="get" class="flex items-center gap-2 w-full max-w-xl">
+          <input type="text" name="q" value="{{ filters.q|default_if_none:'' }}"
+                 class="w-full rounded-xl border px-3 py-2"
+                 placeholder="Buscar por nome ou telefone">
+          <select name="status" class="rounded-xl border px-3 py-2">
+            <option value="">Status</option>
+            <option value="PENDENTE"   {% if filters.status|default_if_none:'' == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+            <option value="CONFIRMADA" {% if filters.status|default_if_none:'' == 'CONFIRMADA' %}selected{% endif %}>Confirmada</option>
+            <option value="NEGADA"     {% if filters.status|default_if_none:'' == 'NEGADA' %}selected{% endif %}>Negada</option>
+            <option value="REALIZADA"  {% if filters.status|default_if_none:'' == 'REALIZADA' %}selected{% endif %}>Realizada</option>
+          </select>
+          <button class="rounded-xl px-4 py-2 bg-black text-white">Filtrar</button>
+          <a href="{% url 'solicitacoes:solicitacoes' %}" class="rounded-xl px-4 py-2 border hover:bg-gray-50">Limpar</a>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="overflow-x-auto rounded-2xl border bg-white">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 text-left">
+        <tr>
+          <th class="px-4 py-3 font-semibold">Criado</th>
+          <th class="px-4 py-3 font-semibold">Cliente</th>
+          <th class="px-4 py-3 font-semibold">Serviço</th>
+          <th class="px-4 py-3 font-semibold">Início</th>
+          <th class="px-4 py-3 font-semibold">Status</th>
+          <th class="px-4 py-3 font-semibold text-right">Ações</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y" id="rows">
+        {% for s in solicitacoes %}
+        <tr id="row-{{ s.id }}" class="hover:bg-gray-50">
+          <td class="px-4 py-3">
+            <div class="font-medium">{{ s.criado_em|date:"d/m/Y H:i" }}</div>
+            {% if s.id_externo %}<div class="text-gray-500 text-xs">#{{ s.id_externo }}</div>{% endif %}
+          </td>
+
+          {# Cliente: usa snapshot ou FK, depois telefone #}
+          <td class="px-4 py-3">
+            <div class="font-medium">{% firstof s.nome s.cliente.nome "—" %}</div>
+            <div class="text-gray-500">{% firstof s.telefone s.cliente.telefone "—" %}</div>
+          </td>
+
+          {# Serviço + duração #}
+          <td class="px-4 py-3">
+            {{ s.servico_label }}
+            {% if s.duracao_min_cotada %}
+              <span class="ml-1 text-xs text-gray-500">({{ s.duracao_min_cotada }}min)</span>
+            {% elif s.servico and s.servico.duracao_min %}
+              <span class="ml-1 text-xs text-gray-500">({{ s.servico.duracao_min }}min)</span>
+            {% endif %}
+          </td>
+
+          <td class="px-4 py-3">
+            {% if s.inicio %}{{ s.inicio|date:"d/m/Y H:i" }}{% else %}—{% endif %}
+          </td>
+
+          {# ✅ Coluna de Status (com id para o JS atualizar) #}
+          <td class="px-4 py-3" id="status-{{ s.id }}">
+            {% if s.status == "PENDENTE" %}
+              <span class="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-800">● Pendente</span>
+            {% elif s.status == "CONFIRMADA" %}
+              <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-green-800">● Confirmada</span>
+            {% elif s.status == "NEGADA" %}
+              <span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-red-800">● Negada</span>
+            {% elif s.status == "REALIZADA" %}
+              <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-blue-800">● Realizada</span>
+            {% else %}
+              <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-gray-800">● {{ s.status }}</span>
+            {% endif %}
+          </td>
+
+          <td class="px-4 py-3" id="actions-{{ s.id }}">
+            <div class="flex justify-end gap-2">
+              <a href="{% url 'solicitacoes:detalhe' s.id %}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Ver</a>
+
+              {# Atalho para criar atendimento a partir da solicitação #}
+              <a href="{% url 'agendamentos:agendamento_novo_para_solicitacao' s.id %}"
+                 class="rounded-xl bg-indigo-600 text-white px-3 py-1.5 hover:bg-indigo-700">Adicionar atendimento</a>
+
+              {% if s.status == "PENDENTE" %}
+                <button type="button"
+                        class="rounded-xl bg-black text-white px-3 py-1.5 hover:opacity-90"
+                        data-id="{{ s.id }}"
+                        data-nome="{% firstof s.nome s.cliente.nome s.telefone %}"
+                        data-telefone="{% firstof s.telefone s.cliente.telefone '' %}"
+                        data-servico="{{ s.servico_label }}"
+                        data-servico-id="{{ s.servico_id|default:'' }}"
+                        data-preco="{% if s.preco_cotado %}{{ s.preco_cotado }}{% elif s.servico and s.servico.valor %}{{ s.servico.valor }}{% endif %}"
+                        data-duracao="{% firstof s.duracao_min_cotada s.servico.duracao_min 0 %}"
+                        data-inicio="{% if s.inicio %}{{ s.inicio|date:'Y-m-d\\TH:i' }}{% endif %}"
+                        onclick="openConfirm(this)">Confirmar</button>
+
+                <button type="button"
+                        class="rounded-xl bg-red-600 text-white px-3 py-1.5 hover:bg-red-700"
+                        data-id="{{ s.id }}"
+                        data-cliente="{% firstof s.nome s.cliente.nome s.telefone %}"
+                        onclick="openDeny(this)">Negar</button>
+              {% elif s.status == "CONFIRMADA" %}
+                <button type="button"
+                        class="rounded-xl bg-emerald-600 text-white px-3 py-1.5 hover:bg-emerald-700"
+                        onclick="submitFinalize({{ s.id }})">Finalizar</button>
+                <button type="button"
+                        class="rounded-xl border px-3 py-1.5 hover:bg-gray-50"
+                        onclick="submitNoShow({{ s.id }})">No-show</button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhuma solicitação.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if page_obj and page_obj.paginator.num_pages > 1 %}
+  <div class="mt-6 flex items-center justify-between">
+    <div class="text-sm text-gray-600">
+      Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} · {{ page_obj.paginator.count }} registros
+    </div>
+    <div class="flex items-center gap-2">
+      {% if page_obj.has_previous %}
+        <a class="rounded-xl border px-3 py-1.5 hover:bg-gray-50"
+           href="?{% if request.GET %}{{ request.GET.urlencode|safe }}&{% endif %}page={{ page_obj.previous_page_number }}">Anterior</a>
+      {% else %}
+        <span class="rounded-xl border px-3 py-1.5 text-gray-400">Anterior</span>
+      {% endif %}
+      {% if page_obj.has_next %}
+        <a class="rounded-xl border px-3 py-1.5 hover:bg-gray-50"
+           href="?{% if request.GET %}{{ request.GET.urlencode|safe }}&{% endif %}page={{ page_obj.next_page_number }}">Próxima</a>
+      {% else %}
+        <span class="rounded-xl border px-3 py-1.5 text-gray-400">Próxima</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{# ============== SLIDE-OVER: CONFIRMAR ============== #}
+<div id="confirmPanel" class="fixed inset-0 z-40 hidden" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/40" onclick="closeConfirm()"></div>
+  <div class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl flex flex-col">
+    <div class="p-4 border-b flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Confirmar solicitação</h2>
+      <button type="button" class="rounded-lg border px-3 py-1.5" onclick="closeConfirm()">Fechar</button>
+    </div>
+    <form id="confirmForm" class="p-4 space-y-4" onsubmit="return false">
+      {% csrf_token %}
+      <input type="hidden" name="status" value="CONFIRMADA">
+      <input type="hidden" name="id" id="confirm-id">
+
+      <div>
+        <div class="text-sm text-gray-500">Cliente</div>
+        <div id="confirm-cliente" class="font-medium">—</div>
+      </div>
+
+      <div>
+        <div class="text-sm text-gray-500 mb-1">Serviço</div>
+
+        {% if servicos %}
+          <select id="confirm-servico-id" name="servico_id" class="w-full rounded-xl border px-3 py-2"
+                  onchange="onServicoChange()">
+            <option value="">Selecione...</option>
+            {% for srv in servicos %}
+              <option value="{{ srv.id }}"
+                      data-dur="{{ srv.duracao_min|default:0 }}"
+                      data-valor="{{ srv.valor|default_if_none:'' }}">
+                {{ srv.nome }}
+              </option>
+            {% endfor %}
+          </select>
+          <div id="confirm-servico" class="text-xs text-gray-500 mt-1"></div>
+          <div id="confirm-duracao" class="text-xs text-gray-500" data-dur="0"></div>
+        {% else %}
+          <div id="confirm-servico" class="font-medium">—</div>
+          <div id="confirm-duracao" class="text-xs text-gray-500" data-dur="0"></div>
+        {% endif %}
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">Início</label>
+          <input type="datetime-local" name="inicio" id="confirm-inicio" class="w-full rounded-xl border px-3 py-2">
+          <p class="text-xs text-gray-500 mt-1">O término será calculado pela duração.</p>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">Preço (R$)</label>
+          <input type="number" step="0.01" min="0" name="preco_cotado" id="confirm-preco"
+                 class="w-full rounded-xl border px-3 py-2" placeholder="Ex.: 45,00">
+          <p class="text-xs text-gray-500 mt-1">Pode ajustar caso necessário.</p>
+        </div>
+      </div>
+
+      <div id="confirm-fim-preview" class="text-sm text-gray-600"></div>
+
+      <div class="pt-2">
+        <button type="button" class="w-full rounded-xl bg-black text-white px-4 py-2 hover:opacity-90"
+                onclick="submitConfirm()">Confirmar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ============== MODAL: NEGAR ============== #}
+<div id="denyModal" class="fixed inset-0 z-40 hidden" aria-hidden="true">
+  <div class="absolute inset-0 bg-black/40" onclick="closeDeny()"></div>
+  <div class="absolute inset-0 m-auto h-fit w-full max-w-md bg-white rounded-2xl shadow-xl">
+    <div class="p-4 border-b flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Negar solicitação</h2>
+      <button type="button" class="rounded-lg border px-3 py-1.5" onclick="closeDeny()">Fechar</button>
+    </div>
+    <form id="denyForm" class="p-4 space-y-4" onsubmit="return false">
+      {% csrf_token %}
+      <input type="hidden" name="status" value="NEGADA">
+      <input type="hidden" name="id" id="deny-id">
+      <p class="text-sm">Você está negando a solicitação de <span id="deny-cliente" class="font-medium">—</span>.</p>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">Motivo (opcional)</label>
+        <textarea name="motivo" id="deny-motivo" rows="3" class="w-full rounded-xl border px-3 py-2"
+                  placeholder="Ex.: indisponibilidade de horário"></textarea>
+      </div>
+      <div class="pt-2">
+        <button type="button" class="w-full rounded-xl bg-red-600 text-white px-4 py-2 hover:bg-red-700"
+                onclick="submitDeny()">Confirmar negação</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{# ============== TOAST ============== #}
+<div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 hidden">
+  <div class="rounded-xl bg-black text-white px-4 py-2 shadow-lg" id="toast-text">OK</div>
+</div>
+
+{# ============== JS ============== #}
+<script>
+  const URL_DETALHE_PATTERN   = "{% url 'solicitacoes:detalhe' 0 %}";
+  const URL_CONFIRMAR_PATTERN = "{% url 'solicitacoes:confirmar' 0 %}";
+  const URL_RECUSAR_PATTERN   = "{% url 'solicitacoes:recusar' 0 %}";
+  const URL_FINALIZAR_PATTERN = "{% url 'solicitacoes:finalizar' 0 %}";
+  const URL_NOSHOW_PATTERN    = "{% url 'solicitacoes:no_show' 0 %}";
+
+  const detUrl    = (id) => URL_DETALHE_PATTERN.replace('/0/', `/${id}/`);
+  const confUrl   = (id) => URL_CONFIRMAR_PATTERN.replace('/0/', `/${id}/`);
+  const recusaUrl = (id) => URL_RECUSAR_PATTERN.replace('/0/', `/${id}/`);
+  const finUrl    = (id) => URL_FINALIZAR_PATTERN.replace('/0/', `/${id}/`);
+  const noshowUrl = (id) => URL_NOSHOW_PATTERN.replace('/0/', `/${id}/`);
+
+  function getCSRFCookie() {
+    const input = document.querySelector('input[name=csrfmiddlewaretoken]');
+    if (input) return input.value;
+    const name = 'csrftoken=';
+    const ca = document.cookie.split(';');
+    for (let c of ca) { c = c.trim(); if (c.indexOf(name) === 0) return c.substring(name.length); }
+    return '';
+  }
+  function showToast(msg) {
+    const t = document.getElementById('toast'), tt = document.getElementById('toast-text');
+    tt.textContent = msg; t.classList.remove('hidden'); setTimeout(()=> t.classList.add('hidden'), 2200);
+  }
+  const ymdhm = (date) => {
+    const p=n=>String(n).padStart(2,'0');
+    return `${date.getFullYear()}-${p(date.getMonth()+1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
+  };
+  const addMinutes = (date, mins) => new Date(date.getTime() + mins*60000);
+
+  function updateFimPreview() {
+    const dur = parseInt(document.getElementById('confirm-duracao')?.dataset.dur || '0', 10);
+    const iniStr = document.getElementById('confirm-inicio').value;
+    const out = document.getElementById('confirm-fim-preview');
+    if (iniStr && dur > 0) {
+      const d = new Date(iniStr); const f = addMinutes(d, dur);
+      out.textContent = 'Término estimado: ' + f.toLocaleString();
+    } else { out.textContent = ''; }
+  }
+
+  function onServicoChange() {
+    const sel = document.getElementById('confirm-servico-id');
+    if (!sel) return;
+    const opt = sel.options[sel.selectedIndex];
+    const dur = parseInt(opt.getAttribute('data-dur') || '0', 10);
+    const val = opt.getAttribute('data-valor') || '';
+    const durEl = document.getElementById('confirm-duracao');
+    const nameEl = document.getElementById('confirm-servico');
+    const precoEl = document.getElementById('confirm-preco');
+    durEl.dataset.dur = dur || 0;
+    durEl.textContent = dur ? `Duração: ${dur} min` : '';
+    nameEl.textContent = opt.value ? opt.textContent : '';
+    if (val && !precoEl.value) { precoEl.value = val; }
+    updateFimPreview();
+  }
+
+  function openConfirm(btn) {
+    const id = btn.dataset.id, nome = btn.dataset.nome || '', tel = btn.dataset.telefone || '';
+    const inicioISO = btn.dataset.inicio || '';
+    const servicoNome = btn.dataset.servico || '';
+    const duracaoMin = parseInt(btn.dataset.duracao || '0', 10);
+    const servicoId = btn.dataset.servicoId || btn.dataset.servicoid || '';
+    const preco = btn.dataset.preco || '';
+
+    document.getElementById('confirm-id').value = id;
+    document.getElementById('confirm-cliente').textContent = (nome || tel || '—');
+
+    const sel = document.getElementById('confirm-servico-id');
+    if (sel) {
+      if (servicoId) {
+        for (let i=0;i<sel.options.length;i++){
+          if (sel.options[i].value === String(servicoId)) { sel.selectedIndex = i; break; }
+        }
+      }
+      if (!sel.value && servicoNome) {
+        for (let i=0;i<sel.options.length;i++){
+          if (sel.options[i].textContent.trim().toLowerCase() === servicoNome.trim().toLowerCase()) { sel.selectedIndex = i; break; }
+        }
+      }
+      onServicoChange();
+      const durEl = document.getElementById('confirm-duracao');
+      if (!(parseInt(durEl.dataset.dur||'0',10)>0) && duracaoMin>0){
+        durEl.dataset.dur = duracaoMin;
+        durEl.textContent = `Duração: ${duracaoMin} min`;
+      }
+    } else {
+      document.getElementById('confirm-servico').textContent = servicoNome;
+      const dur = document.getElementById('confirm-duracao');
+      dur.textContent = duracaoMin ? `Duração: ${duracaoMin} min` : '';
+      dur.dataset.dur = duracaoMin || 0;
+    }
+
+    const precoEl = document.getElementById('confirm-preco');
+    if (precoEl) { precoEl.value = preco || precoEl.value || ''; }
+
+    const now = new Date();
+    const rounded = new Date(Math.ceil(now.getTime() / (5*60000)) * (5*60000));
+    document.getElementById('confirm-inicio').value = inicioISO || ymdhm(rounded);
+
+    updateFimPreview();
+    document.getElementById('confirmPanel').classList.remove('hidden');
+  }
+  function closeConfirm() { document.getElementById('confirmPanel').classList.add('hidden'); }
+
+  async function submitConfirm() {
+    const id = document.getElementById('confirm-id').value;
+    const inicio = document.getElementById('confirm-inicio').value;
+    const preco  = document.getElementById('confirm-preco') ? document.getElementById('confirm-preco').value : '';
+    const sel    = document.getElementById('confirm-servico-id');
+    const servico_id = sel ? (sel.value || '') : '';
+
+    const res = await fetch(confUrl(id), {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCSRFCookie(),
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      },
+      body: new URLSearchParams({ status: 'CONFIRMADA', inicio, servico_id, preco_cotado: preco })
+    });
+
+    if (res.ok) {
+      const row = document.getElementById(`row-${id}`);
+      if (row) {
+        const inicioCell = row.querySelectorAll('td')[3]; if (inicioCell) inicioCell.textContent = new Date(inicio).toLocaleString();
+        const statusCell = document.getElementById(`status-${id}`); if (statusCell) statusCell.innerHTML = '<span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-green-800">● Confirmada</span>';
+        const actionsCell = document.getElementById(`actions-${id}`); if (actionsCell) actionsCell.innerHTML =
+          `<div class="flex justify-end gap-2">
+             <a href="${detUrl(id)}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Ver</a>
+             <button type="button" class="rounded-xl bg-emerald-600 text-white px-3 py-1.5 hover:bg-emerald-700" onclick="submitFinalize(${id})">Finalizar</button>
+             <button type="button" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50" onclick="submitNoShow(${id})">No-show</button>
+           </div>`;
+        if (sel) {
+          const srvCell = row.querySelectorAll('td')[2];
+          const opt = sel.options[sel.selectedIndex];
+          if (srvCell && opt && opt.value){
+            const dur = opt.getAttribute('data-dur') || '';
+            srvCell.innerHTML = opt.textContent + (dur ? ` <span class="ml-1 text-xs text-gray-500">(${dur}min)</span>` : '');
+          }
+        }
+      }
+      showToast('Solicitação confirmada.'); closeConfirm();
+    } else {
+      try {
+        const j = await res.json();
+        if (j && j.error === 'inicio_obrigatorio') showToast('Informe o horário de início.');
+        else showToast('Falha ao confirmar.');
+      } catch { showToast('Falha ao confirmar.'); }
+    }
+  }
+
+  function openDeny(btn) {
+    document.getElementById('deny-id').value = btn.dataset.id;
+    document.getElementById('deny-cliente').textContent = btn.dataset.cliente || 'cliente';
+    document.getElementById('deny-motivo').value = '';
+    document.getElementById('denyModal').classList.remove('hidden');
+  }
+  function closeDeny() { document.getElementById('denyModal').classList.add('hidden'); }
+  async function submitDeny() {
+    const id = document.getElementById('deny-id').value;
+    const motivo = document.getElementById('deny-motivo').value || '';
+    const res = await fetch(recusaUrl(id), {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCSRFCookie(),
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      },
+      body: new URLSearchParams({ status: 'NEGADA', motivo })
+    });
+    if (res.ok) {
+      const statusCell = document.getElementById(`status-${id}`);
+      if (statusCell) statusCell.innerHTML = '<span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-red-800">● Negada</span>';
+      const actionsCell = document.getElementById(`actions-${id}`);
+      if (actionsCell) actionsCell.innerHTML = `<div class="flex justify-end gap-2"><a href="${detUrl(id)}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Ver</a></div>`;
+      showToast('Solicitação negada.'); closeDeny();
+    } else { showToast('Falha ao negar.'); }
+  }
+
+  async function submitFinalize(id) {
+    const res = await fetch(finUrl(id), {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCSRFCookie(),
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      }
+    });
+    if (res.ok) {
+      const statusCell = document.getElementById(`status-${id}`);
+      if (statusCell) statusCell.innerHTML = '<span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-blue-800">● Realizada</span>';
+      const actionsCell = document.getElementById(`actions-${id}`);
+      if (actionsCell) actionsCell.innerHTML = `<div class="flex justify-end gap-2"><a href="${detUrl(id)}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Ver</a></div>`;
+      showToast('Serviço finalizado.');
+    } else {
+      showToast('Ainda não é possível finalizar (verifique o horário).');
+    }
+  }
+
+  async function submitNoShow(id) {
+    const res = await fetch(noshowUrl(id), {
+      method: 'POST',
+      headers: {
+        'X-CSRFToken': getCSRFCookie(),
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+      }
+    });
+    if (res.ok) {
+      showToast('No-show registrado.');
+      const statusCell = document.getElementById(`status-${id}`);
+      if (statusCell && !statusCell.querySelector('[data-noshow]')) {
+        const tag = document.createElement('span');
+        tag.setAttribute('data-noshow','1');
+        tag.className = 'ml-2 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-gray-700';
+        tag.textContent = 'No-show';
+        statusCell.appendChild(tag);
+      }
+    } else {
+      showToast('Falha ao registrar no-show.');
+    }
+  }
+
+  document.addEventListener('input', (e) => {
+    if (e.target && e.target.id === 'confirm-inicio') updateFimPreview();
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'confirm-servico-id') onServicoChange();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeConfirm(); closeDeny(); }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,185 @@
+{% extends "painel/base.html" %}
+{% block title %}{{ title|default:"Minha agenda" }}{% endblock %}
+{% block header %}{{ title|default:"Minha agenda" }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-7xl px-4 py-6 space-y-6">
+
+  {% if messages %}
+    <div>
+      {% for m in messages %}
+        <div class="mb-2 rounded-xl px-4 py-2 text-sm
+                    {% if m.tags == 'success' %}bg-emerald-50 text-emerald-800 border border-emerald-200
+                    {% elif m.tags == 'error' %}bg-rose-50 text-rose-800 border border-rose-200
+                    {% else %}bg-slate-50 text-slate-800 border border-slate-200{% endif %}">
+          {{ m }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- COLUNA 1-2: CONFIGURAÇÃO SEMANAL -->
+    <section class="lg:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm">
+      <div class="p-4 border-b">
+        <h2 class="text-base font-semibold text-slate-900">Horário padrão (por dia da semana)</h2>
+        <p class="text-xs text-slate-500 mt-1">Defina expediente, granularidade (minutos) e intervalo de almoço por dia. Desative o dia para folga semanal.</p>
+      </div>
+
+      <form method="post" class="p-4 space-y-4">
+        {% csrf_token %}
+        {{ formset.management_form }}
+
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50">
+              <tr class="text-left text-slate-600">
+                <th class="px-3 py-2 font-medium">Dia</th>
+                <th class="px-3 py-2 font-medium">Ativo</th>
+                <th class="px-3 py-2 font-medium">Início</th>
+                <th class="px-3 py-2 font-medium">Fim</th>
+                <th class="px-3 py-2 font-medium">Slot (min)</th>
+                <th class="px-3 py-2 font-medium">Almoço: Início</th>
+                <th class="px-3 py-2 font-medium">Almoço: Fim</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y">
+              {% for f in formset %}
+              <tr class="hover:bg-slate-50">
+                <td class="px-3 py-2">
+                  {{ f.weekday }}  {# Select - já vem com label do dia #}
+                  {% for e in f.weekday.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+                </td>
+                <td class="px-3 py-2">
+                  <label class="inline-flex items-center gap-2">
+                    {{ f.is_active }}
+                    <span class="text-xs text-slate-600">Ativo</span>
+                  </label>
+                  {% for e in f.is_active.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+                </td>
+                <td class="px-3 py-2">
+                  {{ f.start_time }}
+                  {% for e in f.start_time.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+                </td>
+                <td class="px-3 py-2">
+                  {{ f.end_time }}
+                  {% for e in f.end_time.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+                </td>
+                <td class="px-3 py-2">
+                  {{ f.slot_minutes }}
+                  {% for e in f.slot_minutes.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+                </td>
+                <td class="px-3 py-2">
+                  {{ f.lunch_start }}
+                  {% for e in f.lunch_start.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+                </td>
+                <td class="px-3 py-2">
+                  {{ f.lunch_end }}
+                  {% for e in f.lunch_end.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if formset.non_form_errors %}
+          <div class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">
+            {{ formset.non_form_errors }}
+          </div>
+        {% endif %}
+
+        <div class="pt-2">
+          <button class="rounded-xl bg-black text-white px-4 py-2 hover:opacity-90">Salvar regras</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- COLUNA 3: FOLGAS + PRÉVIA -->
+    <section class="space-y-6">
+      <!-- Folgas -->
+      <div class="bg-white rounded-2xl border border-gray-200 shadow-sm">
+        <div class="p-4 border-b">
+          <h3 class="text-base font-semibold text-slate-900">Folgas / Exceções</h3>
+          <p class="text-xs text-slate-500 mt-1">Bloqueia horários dentro do período informado.</p>
+        </div>
+        <form method="post" class="p-4 space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="{{ formset.management_form.prefix }}-TOTAL_FORMS" value="{{ formset.total_form_count }}">
+          <div class="grid grid-cols-1 gap-3">
+            <div>
+              <label class="block text-sm text-slate-600 mb-1">Início</label>
+              {{ off_form.start }}
+              {% for e in off_form.start.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+            </div>
+            <div>
+              <label class="block text-sm text-slate-600 mb-1">Fim</label>
+              {{ off_form.end }}
+              {% for e in off_form.end.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+            </div>
+            <div>
+              <label class="block text-sm text-slate-600 mb-1">Motivo (opcional)</label>
+              {{ off_form.reason }}
+              {% for e in off_form.reason.errors %}<div class="text-xs text-rose-700">{{ e }}</div>{% endfor %}
+            </div>
+          </div>
+          <div>
+            <button class="rounded-xl border px-4 py-2 hover:bg-gray-50">Adicionar folga</button>
+          </div>
+        </form>
+        {% if offs %}
+        <div class="px-4 pb-4">
+          <div class="text-xs text-slate-500 mb-2">Próximas folgas</div>
+          <ul class="space-y-1 text-sm">
+            {% for o in offs %}
+              <li class="flex items-center justify-between">
+                <span>{{ o.start|date:"d/m H:i" }} → {{ o.end|date:"d/m H:i" }}</span>
+                <span class="text-slate-500">{{ o.reason|default:"—" }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Pré-visualização -->
+      <div class="bg-white rounded-2xl border border-gray-200 shadow-sm">
+        <div class="p-4 border-b">
+          <h3 class="text-base font-semibold text-slate-900">Pré-visualização do dia</h3>
+          <p class="text-xs text-slate-500 mt-1">Mostra slots livres, almoço e folga para o dia escolhido.</p>
+        </div>
+        <form method="get" class="p-4">
+          <label class="block text-sm text-slate-600 mb-1">Dia</label>
+          <input type="date" name="data" value="{{ preview_date|date:'Y-m-d' }}" class="w-full rounded-xl border px-3 py-2" onchange="this.form.submit()">
+        </form>
+        <div class="px-4 pb-4">
+          <div class="flex items-center gap-2 text-xs mb-3">
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5">Livre</span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">Almoço</span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-slate-200 text-slate-700 px-2 py-0.5">Folga</span>
+          </div>
+          {% if preview_slots %}
+            <ul class="space-y-1 text-sm">
+              {% for s in preview_slots %}
+                <li class="flex items-center justify-between rounded-lg border px-3 py-2
+                           {% if s.available %}bg-emerald-50 border-emerald-200 text-emerald-800
+                           {% elif s.reason == 'almoco' %}bg-amber-50 border-amber-200 text-amber-800
+                           {% else %}bg-slate-50 border-slate-200 text-slate-700{% endif %}">
+                  <span>{{ s.start|date:"H:i" }} – {{ s.end|date:"H:i" }}</span>
+                  <span class="text-xs">
+                    {% if s.available %}Livre
+                    {% elif s.reason == 'almoco' %}Almoço
+                    {% else %}Folga{% endif %}
+                  </span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <div class="text-sm text-slate-500">Dia desativado.</div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

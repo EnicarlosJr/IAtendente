@@ -1,0 +1,55 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}IAtendente{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'build/tailwind.css' %}">
+</head>
+<body class="min-h-screen text-slate-900 bg-gradient-to-b from-slate-50 to-slate-100">
+
+  <!-- Drawer mobile -->
+  <input id="sidebar-toggle" type="checkbox" class="peer hidden" />
+
+  <div class="min-h-screen flex">
+    <!-- SIDEBAR -->
+    <aside class="fixed lg:static inset-y-0 left-0 z-40 w-64
+                  -translate-x-full peer-checked:translate-x-0 lg:translate-x-0
+                  transition-transform duration-200 bg-white border-r border-gray-200 shadow-sm">
+      {% include "painel/_sidebar.html" %}
+    </aside>
+
+    <!-- OVERLAY (mobile) -->
+    <label for="sidebar-toggle"
+           class="fixed inset-0 z-30 bg-black/40 lg:hidden hidden peer-checked:block"></label>
+
+    <!-- CONTEÚDO -->
+    <main class="flex-1 min-w-0 flex flex-col">
+      <!-- TOPBAR (sólida p/ máximo contraste) -->
+      <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4">
+        <div class="flex items-center gap-2">
+          <label for="sidebar-toggle"
+                 class="lg:hidden inline-flex items-center justify-center size-9 rounded-md border border-gray-200 bg-white hover:bg-gray-50">
+            <svg class="w-5 h-5 text-gray-700" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M3 5h14v2H3V5zm0 4h14v2H3V9zm0 4h14v2H3v-2z" clip-rule="evenodd"/>
+            </svg>
+          </label>
+          <h1 class="font-semibold text-slate-800">{% block header %}{{ title|default:"" }}{% endblock %}</h1>
+        </div>
+        <div class="hidden md:block w-72">
+          <input type="text" placeholder="Buscar..."
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
+                        text-slate-900 placeholder:text-slate-400
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+        </div>
+      </header>
+
+      <!-- PAGE -->
+      <div class="p-6 max-w-7xl w-full mx-auto">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+</body>
+</html>

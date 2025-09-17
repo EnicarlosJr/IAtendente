@@ -1,0 +1,19 @@
+{
+  "name": "iatendente",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "tw:dev": "./node_modules/.bin/tailwindcss -i ./painel/static/src/tailwind.css -o ./painel/static/build/tailwind.css --watch",
+    "tw:build": "./node_modules/.bin/tailwindcss -i ./painel/static/src/tailwind.css -o ./painel/static/build/tailwind.css --minify"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.2.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17"
+  }
+}

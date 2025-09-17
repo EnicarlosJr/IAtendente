@@ -1,0 +1,69 @@
+{% extends "painel/base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block header %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-3xl px-4 py-6">
+  <form method="post" class="bg-white rounded-2xl border p-4 space-y-4">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="text-sm text-gray-700">Cliente</label>
+        {{ form.cliente }}
+        {{ form.cliente.errors }}
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">Nome do cliente (snapshot)</label>
+        {{ form.cliente_nome }}
+        {{ form.cliente_nome.errors }}
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-700">Barbeiro</label>
+        {{ form.barbeiro }}
+        {{ form.barbeiro.errors }}
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">Serviço</label>
+        {{ form.servico }}
+        {{ form.servico.errors }}
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-700">Início</label>
+        {{ form.inicio }}
+        {{ form.inicio.errors }}
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">Fim (opcional — calcula pelo serviço)</label>
+        {{ form.fim }}
+        {{ form.fim.errors }}
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-700">Preço cobrado</label>
+        {{ form.preco_cobrado }}
+        {{ form.preco_cobrado.errors }}
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">Status</label>
+        {{ form.status }}
+        {{ form.status.errors }}
+      </div>
+
+      <div class="md:col-span-2">
+        <label class="text-sm text-gray-700">Observações</label>
+        {{ form.observacoes }}
+        {{ form.observacoes.errors }}
+      </div>
+    </div>
+
+    <div class="pt-2 flex gap-2">
+      <button class="rounded-xl px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700">Salvar atendimento</button>
+      <a href="{% url 'agendamentos:agenda' %}" class="rounded-xl px-4 py-2 border hover:bg-gray-50">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

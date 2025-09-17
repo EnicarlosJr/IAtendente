@@ -1,0 +1,135 @@
+{% extends "painel/base.html" %}
+{% load l10n %}
+{% block title %}Solicitação #{{ solicitacao.id }}{% endblock %}
+{% block header %}Solicitação #{{ solicitacao.id }}{% endblock %}
+
+{% block content %}
+{% with s=solicitacao %}
+<div class="mx-auto max-w-5xl px-4 py-6 space-y-6">
+
+  <a href="{% url 'solicitacoes:solicitacoes' %}" class="text-sm text-gray-600 hover:underline">← Voltar para solicitações</a>
+
+  <!-- Cabeçalho com status -->
+  <div class="bg-white rounded-2xl border p-4 flex items-start justify-between gap-6">
+    <div>
+      <h2 class="text-xl font-semibold text-gray-900">
+        {{ s.nome|default:"Cliente" }}
+        <span class="text-gray-500 font-normal">· {{ s.telefone|default:"—" }}</span>
+      </h2>
+      <p class="text-gray-600 mt-1">
+        Serviço: <span class="font-medium">{{ s.servico_label }}</span>
+        {% if s.servico_id %}
+          <span class="text-xs text-gray-500">(catálogo)</span>
+        {% else %}
+          <span class="text-xs text-gray-500">(snapshot)</span>
+        {% endif %}
+      </p>
+    </div>
+
+    <div>
+      <span class="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium
+        {% if s.status == 'CONFIRMADA' %} bg-blue-100 text-blue-700
+        {% elif s.status == 'REALIZADA' %} bg-emerald-100 text-emerald-700
+        {% elif s.status == 'NEGADA' %} bg-rose-100 text-rose-700
+        {% else %} bg-gray-100 text-gray-700 {% endif %}">
+        {{ s.get_status_display }}
+      </span>
+    </div>
+  </div>
+
+  <!-- Detalhes -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-white rounded-2xl border p-4 space-y-3">
+      <h3 class="text-sm font-semibold text-gray-900 tracking-wide uppercase">Detalhes</h3>
+      <div class="text-sm text-gray-700 space-y-2">
+        <div><span class="text-gray-500">Telefone:</span> {{ s.telefone|default:"—" }}</div>
+        <div><span class="text-gray-500">Serviço (snapshot):</span> {{ s.servico_nome|default:s.servico_label }}</div>
+        <div><span class="text-gray-500">Preço cotado:</span>
+          {% if s.preco_cotado is not None %} R$ {{ s.preco_cotado|floatformat:2|localize }} {% else %} — {% endif %}
+        </div>
+        <div><span class="text-gray-500">Duração (min):</span> {{ s.duracao_min_cotada|default:"—" }}</div>
+        <div><span class="text-gray-500">Início:</span>
+          {% if s.inicio %} {{ s.inicio|date:"d/m/Y H:i" }} {% else %} — {% endif %}
+        </div>
+        <div><span class="text-gray-500">Fim:</span>
+          {% if s.fim %} {{ s.fim|date:"d/m/Y H:i" }} {% else %} — {% endif %}
+        </div>
+        <div><span class="text-gray-500">Observações:</span> {{ s.observacoes|default:"—" }}</div>
+        <div class="text-xs text-gray-500 pt-2">Criado em {{ s.criado_em|date:"d/m/Y H:i" }}</div>
+      </div>
+    </div>
+
+    <!-- Ações -->
+    <div class="space-y-6">
+      <!-- Confirmar -->
+      <div class="bg-white rounded-2xl border p-4">
+        <h3 class="text-sm font-semibold text-gray-900 tracking-wide uppercase mb-3">Confirmar horário</h3>
+        <form method="post" action="{% url 'solicitacoes:confirmar' s.id %}" class="space-y-3">
+          {% csrf_token %}
+          <div class="grid grid-cols-1 gap-3">
+            <label class="text-sm text-gray-700">Horário de início</label>
+            <input type="datetime-local" name="inicio"
+                   value="{% if s.inicio %}{{ s.inicio|date:'Y-m-d\\TH:i' }}{% endif %}"
+                   class="rounded-xl border px-3 py-2 w-full" required>
+          </div>
+
+          <div class="grid grid-cols-1 gap-3">
+            <label class="text-sm text-gray-700">Serviço (catálogo)</label>
+            <select name="servico_id" class="rounded-xl border px-3 py-2 w-full">
+              <option value="">— manter atual —</option>
+              {% for item in servicos %}
+                <option value="{{ item.id }}" {% if s.servico_id == item.id %}selected{% endif %}>
+                  {{ item.nome }} — {{ item.duracao_min }}min · R$ {{ item.preco|floatformat:2|localize }}
+                </option>
+              {% endfor %}
+            </select>
+            <p class="text-xs text-gray-500">Se escolher, atualiza os snapshots (nome, preço, duração).</p>
+          </div>
+
+          <div class="grid grid-cols-1 gap-3">
+            <label class="text-sm text-gray-700">Preço cotado (opcional)</label>
+            <input type="number" step="0.01" name="preco_cotado"
+                   value="{% if s.preco_cotado is not None %}{{ s.preco_cotado }}{% endif %}"
+                   class="rounded-xl border px-3 py-2 w-full" placeholder="Ex.: 45.00">
+          </div>
+
+          <div class="pt-2 flex gap-2">
+            <button class="rounded-xl px-4 py-2 bg-blue-600 text-white hover:bg-blue-700">Confirmar</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Recusar -->
+      <div class="bg-white rounded-2xl border p-4">
+        <h3 class="text-sm font-semibold text-gray-900 tracking-wide uppercase mb-3">Recusar solicitação</h3>
+        <form method="post" action="{% url 'solicitacoes:recusar' s.id %}" class="space-y-3">
+          {% csrf_token %}
+          <textarea name="motivo" rows="2" class="rounded-xl border px-3 py-2 w-full"
+                    placeholder="Motivo (opcional)"></textarea>
+          <button class="rounded-xl px-4 py-2 border text-gray-800 hover:bg-gray-50">Recusar</button>
+        </form>
+      </div>
+
+      <!-- Finalizar / No-show (apenas se confirmada) -->
+      {% if s.status == 'CONFIRMADA' %}
+      <div class="bg-white rounded-2xl border p-4">
+        <h3 class="text-sm font-semibold text-gray-900 tracking-wide uppercase mb-3">Pós-atendimento</h3>
+        <div class="flex gap-2">
+          <form method="post" action="{% url 'solicitacoes:finalizar' s.id %}">
+            {% csrf_token %}
+            <button class="rounded-xl px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700">Finalizar</button>
+          </form>
+          <form method="post" action="{% url 'solicitacoes:no_show' s.id %}">
+            {% csrf_token %}
+            <button class="rounded-xl px-4 py-2 bg-amber-600 text-white hover:bg-amber-700">Marcar no-show</button>
+          </form>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Finalizar só é permitido após o horário de início.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+{% endwith %}
+{% endblock %}

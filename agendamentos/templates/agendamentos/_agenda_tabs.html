@@ -1,0 +1,11 @@
+<div class="mb-4 flex gap-2">
+  <a href="{% url 'agendamentos:agenda_dia' %}" class="px-3 py-1.5 rounded-lg border text-sm
+     {% if view == 'dia' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-50{% endif %}">
+     Dia</a>
+  <a href="{% url 'agendamentos:agenda_semana' %}" class="px-3 py-1.5 rounded-lg border text-sm
+     {% if view == 'semana' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-50{% endif %}">
+     Semana</a>
+  <a href="{% url 'agendamentos:agenda_mes' %}" class="px-3 py-1.5 rounded-lg border text-sm
+     {% if view == 'mes' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-50{% endif %}">
+     Mês</a>
+</div>
