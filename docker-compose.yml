@@ -1,0 +1,38 @@
+services:
+  web:
+    build: .
+    container_name: django_app
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn IAtendente.wsgi:application --bind 0.0.0.0:8000"
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+    networks:
+      - evolution-net
+
+  db:
+    image: postgres:15
+    container_name: django_db
+    restart: always
+    environment:
+      POSTGRES_DB: django_db
+      POSTGRES_USER: django
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - django_db_data:/var/lib/postgresql/data
+    networks:
+      - evolution-net
+
+volumes:
+  django_db_data:
+
+networks:
+  evolution-net:
+    driver: bridge
