@@ -1,0 +1,15 @@
+<div class="card p-4">
+  <div class="flex items-center justify-between">
+    <div class="text-xs text-slate-500">Ocupação (hoje)</div>
+    <span class="pill bg-slate-100 text-slate-700">{{ workday_label|default:"08h–20h" }}</span>
+  </div>
+  <div class="kpi-val">{{ u|default:0 }}%</div>
+  {% with u=u|default:0 %}
+    <div class="mt-2 h-2 w-full rounded-full bg-slate-100" aria-hidden="true">
+      <div class="h-2 rounded-full {% if u < 50 %}bg-emerald-500{% elif u < 80 %}bg-amber-500{% else %}bg-rose-500{% endif %}"
+           style="width: {{ u }}%"></div>
+    </div>
+    <div class="sr-only">Utilização hoje: {{ u }}%</div>
+  {% endwith %}
+  <div class="kpi-hint">Baseado na sua janela de trabalho configurada.</div>
+</div>

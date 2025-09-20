@@ -1,0 +1,95 @@
+{% extends "painel/base.html" %}
+{% block title %}Usuários · IAtendente{% endblock %}
+{% block header %}Usuários da barbearia{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-5xl space-y-6">
+
+  <div class="card p-4">
+    <div class="flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Convidar usuário</h2>
+      <span class="pill bg-slate-100 text-slate-700">{{ shop.nome }}</span>
+    </div>
+    <form class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3"
+          method="post" action="{% url 'barbearias:usuarios_convidar' %}">
+      {% csrf_token %}
+      <input type="email" name="email" required placeholder="email@exemplo.com" class="rounded-lg border px-3 py-2">
+      <select name="role" class="rounded-lg border px-3 py-2">
+        {% for v,l in membros.model._meta.get_field('role').choices %}
+          <option value="{{ v }}">{{ l }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn btn-primary">Convidar</button>
+    </form>
+    <p class="text-xs text-slate-500 mt-2">Se o e-mail não existir, o usuário será criado e vinculado a esta barbearia.</p>
+  </div>
+
+  <div class="card overflow-hidden">
+    <div class="px-4 py-3 soft-divider flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Membros</h2>
+      <span class="pill bg-slate-100 text-slate-700">{{ membros|length }} no total</span>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-left">
+          <tr>
+            <th class="px-4 py-3 font-medium">Usuário</th>
+            <th class="px-4 py-3 font-medium">E-mail</th>
+            <th class="px-4 py-3 font-medium">Papel</th>
+            <th class="px-4 py-3 font-medium">Status</th>
+            <th class="px-4 py-3 font-medium text-right">Ações</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y">
+          {% for m in membros %}
+            <tr>
+              <td class="px-4 py-3">{{ m.user.get_full_name|default:m.user.username }}</td>
+              <td class="px-4 py-3">{{ m.user.email }}</td>
+              <td class="px-4 py-3">
+                <form method="post" action="{% url 'barbearias:usuarios_atualizar' m.id %}" class="inline-flex items-center gap-2">
+                  {% csrf_token %}
+                  <select name="role" class="rounded-md border px-2 py-1 text-xs">
+                    {% for v,l in m._meta.get_field('role').choices %}
+                      <option value="{{ v }}" {% if m.role == v %}selected{% endif %}>{{ l }}</option>
+                    {% endfor %}
+                  </select>
+                  <input type="hidden" name="is_active" value="{{ m.is_active|yesno:'on,off' }}">
+                  <button class="btn btn-outline">Salvar</button>
+                </form>
+              </td>
+              <td class="px-4 py-3">
+                {% if m.is_active %}
+                  <span class="pill bg-emerald-100 text-emerald-700">Ativo</span>
+                {% else %}
+                  <span class="pill bg-slate-100 text-slate-700">Inativo</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex justify-end gap-2">
+                  {% if m.is_active %}
+                    <form method="post" action="{% url 'barbearias:usuarios_remover' m.id %}">
+                      {% csrf_token %}
+                      <button class="btn btn-outline">Desativar</button>
+                    </form>
+                  {% else %}
+                    <form method="post" action="{% url 'barbearias:usuarios_atualizar' m.id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="role" value="{{ m.role }}">
+                      <input type="hidden" name="is_active" value="on">
+                      <button class="btn btn-primary">Reativar</button>
+                    </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">Nenhum membro cadastrado.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

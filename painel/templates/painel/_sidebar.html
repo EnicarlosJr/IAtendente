@@ -1,87 +1,120 @@
-{% with path=request.path q=request.GET.urlencode pending=solicitacoes_pendentes_count|default:0 %}
-  <!-- Brand -->
-  <div class="px-4 py-3 border-b border-gray-200">
-    <div class="text-lg font-bold">IAtendente</div>
-    <div class="text-xs text-gray-500">Painel Administrativo</div>
+{% with rm=request.resolver_match|default:'' ns=rm.namespace|default:'' url_name=rm.url_name|default:'' q=request.GET.urlencode pending=solicitacoes_pendentes_count|default:0 %}
+
+  <!-- BRAND -->
+  <div class="px-4 py-4 border-b border-gray-200 bg-slate-50">
+    <a href="{% url 'painel:dashboard' %}" class="block">
+      <div class="text-lg font-bold text-slate-800">IAtendente</div>
+      <div class="text-xs text-gray-500">Painel Administrativo</div>
+    </a>
   </div>
 
-  <nav class="p-2 space-y-1 text-sm">
+  <!-- NAV -->
+  <nav class="p-3 space-y-2 text-sm">
     <div class="px-2 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Navegação</div>
 
     <!-- Dashboard -->
     <a href="{% url 'painel:dashboard' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg
-              {% if path == '/' %}bg-blue-600 text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
+       class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+              {% if ns == 'painel' and url_name == 'dashboard' %}
+                bg-blue-600 text-white shadow-sm
+              {% else %}
+                text-slate-700 hover:bg-slate-50
+              {% endif %}">
       <span>🏠</span><span>Dashboard</span>
     </a>
 
     <!-- Agenda -->
-    <details class="group" {% if path|slice:':7' == '/agendames' %}open{% endif %}>
-      <summary class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer
-                      {% if path|slice:':7' == '/agenda' %}bg-blue-600 text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
-        <span>📅</span>
-        <span class="flex-1">Agenda</span>
+    <details class="group" {% if ns == 'agendamentos' %}open{% endif %}>
+      <summary class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition
+                      {% if ns == 'agendamentos' %}
+                        bg-blue-600 text-white shadow-sm
+                      {% else %}
+                        text-slate-700 hover:bg-slate-50
+                      {% endif %}">
+        <span>📅</span><span class="flex-1">Agenda</span>
         <span class="transition-transform group-open:rotate-180 opacity-70">▾</span>
       </summary>
       <div class="mt-1 ml-6 space-y-1">
         <a href="{% url 'agendamentos:agenda_dia' %}?view=dia"
-           class="block px-3 py-2 rounded-md {% if 'view=dia' in q %}bg-blue-600 text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %}">Dia</a>
+           class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_dia' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
+          Dia
+        </a>
         <a href="{% url 'agendamentos:agenda_semana' %}?view=semana"
-           class="block px-3 py-2 rounded-md {% if 'view=semana' in q %}bg-blue-600 text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %}">Semana</a>
+           class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_semana' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
+          Semana
+        </a>
         <a href="{% url 'agendamentos:agenda_mes' %}?view=mes"
-           class="block px-3 py-2 rounded-md {% if 'view=mes' in q %}bg-blue-600 text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %}">Mês</a>
+           class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_mes' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
+          Mês
+        </a>
       </div>
     </details>
 
     <!-- Solicitações -->
     <a href="{% url 'painel:solicitacoes' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg
-              {% if path|slice:':13' == '/solicitacoes' and not path|slice:':22' == '/solicitacoes/servicos' %}bg-blue-600 text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
-      <span>📝</span><span class="flex-1">Solicitações</span>
+       class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+              {% if ns == 'painel' and url_name == 'solicitacoes' %}
+                bg-blue-600 text-white shadow-sm
+              {% else %}
+                text-slate-700 hover:bg-slate-50
+              {% endif %}">
+      <span>📝</span>
+      <span class="flex-1">Solicitações</span>
       <span class="ml-auto inline-flex items-center rounded-full text-[11px] px-2 py-0.5
-                   {% if pending|default:0 > 0 %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-600{% endif %}">
+                   {% if pending|default:0 > 0 %}
+                     bg-amber-100 text-amber-700
+                   {% else %}
+                     bg-slate-100 text-slate-600
+                   {% endif %}">
         {{ pending|default:0 }}
       </span>
     </a>
 
-    <!-- Serviços (Tabela de valores) -->
+    <!-- Serviços -->
     <a href="{% url 'servicos:lista' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg
-              {% if path|slice:':22' == '/solicitacoes/servicos' %}bg-blue-600 text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
+       class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+              {% if ns == 'servicos' %}
+                bg-blue-600 text-white shadow-sm
+              {% else %}
+                text-slate-700 hover:bg-slate-50
+              {% endif %}">
       <span>✂️</span><span>Serviços</span>
     </a>
 
     <!-- Clientes -->
     <a href="{% url 'clientes:lista' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg
-              {% if path|slice:':9' == '/clientes' %}bg-blue-600 text-white{% else %}text-slate-700 hover:bg-slate-50{% endif %}">
+       class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+              {% if ns == 'clientes' %}
+                bg-blue-600 text-white shadow-sm
+              {% else %}
+                text-slate-700 hover:bg-slate-50
+              {% endif %}">
       <span>👤</span><span>Clientes</span>
     </a>
 
-    <div class="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Atalhos</div>
+    <!-- Usuários (somente se gerente/dono) -->
+    {% if is_manager %}
+      <a href="{% url 'barbearias:usuarios' %}"
+         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'barbearias' and url_name == 'usuarios' %}
+                  bg-blue-600 text-white shadow-sm
+                {% else %}
+                  text-slate-700 hover:bg-slate-50
+                {% endif %}">
+        <span>👥</span><span>Usuários</span>
+      </a>
+    {% endif %}
 
-    <a href="{% url 'agendamentos:agenda' %}" class="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50">
+    <!-- Atalhos -->
+    <div class="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Atalhos</div>
+    <a href="{% url 'agendamentos:agenda_dia' %}?new=1"
+       class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
       <span>➕</span><span>Novo horário</span>
     </a>
-    <a href="{% url 'clientes:novo' %}" class="flex items-center gap-2 px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50">
+    <a href="{% url 'clientes:novo' %}"
+       class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
       <span>👥</span><span>Novo cliente</span>
     </a>
   </nav>
 
-  <!-- Perfil -->
-  <div class="m-3 mt-4 p-3 rounded-lg border border-gray-200">
-    <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-full bg-slate-200"></div>
-      <div class="min-w-0">
-        <div class="font-semibold text-sm truncate">
-          {{ request.user.get_full_name|default:request.user.username|default:"Usuário" }}
-        </div>
-        <div class="text-xs text-gray-500 truncate">{{ request.user.email|default:"" }}</div>
-      </div>
-    </div>
-    <div class="flex gap-2 mt-3">
-      <a href="#" class="flex-1 text-center px-3 py-2 text-sm rounded-md border border-gray-200 hover:bg-slate-50">Perfil</a>
-      <a href="{% url 'admin:logout' %}" class="flex-1 text-center px-3 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700">Sair</a>
-    </div>
-  </div>
 {% endwith %}

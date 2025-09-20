@@ -1,0 +1,67 @@
+{% extends "painel/base_public.html" %}
+{% block title %}Agendar com {{ barber.get_full_name|default:barber.username }}{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-lg p-6 bg-white rounded-xl border">
+  <h1 class="text-xl font-semibold mb-4">Agendar com {{ barber.get_full_name|default:barber.username }}</h1>
+
+  <form id="f" class="space-y-3" onsubmit="return false;">
+    <div>
+      <label class="block text-sm mb-1">Seu nome</label>
+      <input name="nome" class="w-full border rounded px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Telefone (WhatsApp)</label>
+      <input name="telefone" class="w-full border rounded px-3 py-2" required>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Serviço</label>
+      <select name="servico" class="w-full border rounded px-3 py-2" required>
+        {% for s in servicos %}
+          <option value="{{ s.nome|escape }}">{{ s.nome }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Data e horário (opcional)</label>
+      <input type="datetime-local" name="inicio" class="w-full border rounded px-3 py-2">
+      <p class="text-xs text-gray-500">Agendamos de 30 em 30 minutos.</p>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Observações (opcional)</label>
+      <textarea name="observacoes" rows="3" class="w-full border rounded px-3 py-2"></textarea>
+    </div>
+    <button id="btn" class="w-full bg-black text-white rounded px-4 py-2">Enviar solicitação</button>
+    <p id="ok" class="hidden text-green-700 text-sm mt-2">Solicitação enviada! Em breve entraremos em contato.</p>
+  </form>
+</div>
+
+<script>
+const intake = "{{ intake_url }}";
+const API_KEY = "{{ api_key }}";
+document.getElementById("btn").addEventListener("click", async () => {
+  const fd = new FormData(document.getElementById("f"));
+  const payload = {
+    telefone: fd.get("telefone"),
+    nome: fd.get("nome"),
+    servico: fd.get("servico"),
+    inicio: fd.get("inicio") || null,
+    observacoes: fd.get("observacoes") || null
+  };
+  const params = new URLSearchParams();
+  if (API_KEY) params.set("api_key", API_KEY);
+
+  const res = await fetch(intake + (params.toString() ? ("?" + params.toString()) : ""), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    document.getElementById("ok").classList.remove("hidden");
+    document.getElementById("f").reset();
+  } else {
+    const j = await res.json().catch(()=> ({}));
+    alert("Falha: " + JSON.stringify(j));
+  }
+});
+</script>
+{% endblock %}

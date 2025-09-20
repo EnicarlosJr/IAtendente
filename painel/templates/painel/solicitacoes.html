@@ -5,102 +5,124 @@
 {% block content %}
 <div class="mx-auto max-w-7xl px-4 py-6">
 
+  {# =================== RESUMO / ALERTAS =================== #}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-      <div class="text-sm font-semibold text-gray-800 mb-2">Alertas</div>
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+      <h2 class="text-sm font-semibold text-gray-800 mb-2">Alertas</h2>
       <ul class="text-sm space-y-2">
         <li>🔔 {{ alertas.sem_confirmacao|default:0 }} clientes sem confirmação</li>
         <li>⏱️ {{ alertas.inativos_30d|default:0 }} clientes inativos há +30 dias</li>
         <li>📅 {{ alertas.solicitacoes_pendentes|default:0 }} solicitações pendentes</li>
       </ul>
-    </div>
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:col-span-2">
-      <div class="flex items-center justify-between gap-2">
+    </section>
+
+    {# =================== FILTROS + AÇÃO GLOBAL =================== #}
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:col-span-2">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <h1 class="text-lg font-semibold">Solicitações</h1>
-        <form method="get" class="flex items-center gap-2 w-full max-w-xl">
-          <input type="text" name="q" value="{{ filters.q|default_if_none:'' }}"
-                 class="w-full rounded-xl border px-3 py-2"
-                 placeholder="Buscar por nome ou telefone">
-          <select name="status" class="rounded-xl border px-3 py-2">
-            <option value="">Status</option>
-            <option value="PENDENTE"   {% if filters.status|default_if_none:'' == 'PENDENTE' %}selected{% endif %}>Pendente</option>
-            <option value="CONFIRMADA" {% if filters.status|default_if_none:'' == 'CONFIRMADA' %}selected{% endif %}>Confirmada</option>
-            <option value="NEGADA"     {% if filters.status|default_if_none:'' == 'NEGADA' %}selected{% endif %}>Negada</option>
-            <option value="REALIZADA"  {% if filters.status|default_if_none:'' == 'REALIZADA' %}selected{% endif %}>Realizada</option>
-          </select>
-          <button class="rounded-xl px-4 py-2 bg-black text-white">Filtrar</button>
-          <a href="{% url 'solicitacoes:solicitacoes' %}" class="rounded-xl px-4 py-2 border hover:bg-gray-50">Limpar</a>
-        </form>
+
+        <a href="{% url 'agendamentos:agendamento_novo' %}"
+           class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+          <span aria-hidden="true">➕</span>
+          <span>Adicionar atendimento</span>
+        </a>
       </div>
-    </div>
+
+      <form method="get" class="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 w-full max-w-4xl">
+        <input type="text" name="q" value="{{ filters.q|default_if_none:'' }}"
+               class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300"
+               placeholder="Buscar por nome ou telefone" aria-label="Buscar por nome ou telefone">
+
+        <select name="status" class="rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300" aria-label="Filtrar por status">
+          <option value="">Status</option>
+          <option value="PENDENTE"   {% if filters.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
+          <option value="CONFIRMADA" {% if filters.status == 'CONFIRMADA' %}selected{% endif %}>Confirmada</option>
+          <option value="NEGADA"     {% if filters.status == 'NEGADA' %}selected{% endif %}>Negada</option>
+          <option value="REALIZADA"  {% if filters.status == 'REALIZADA' %}selected{% endif %}>Realizada</option>
+        </select>
+
+        <button class="rounded-xl px-4 py-2 bg-black text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-black/40">Filtrar</button>
+
+        <a href="{% url 'solicitacoes:solicitacoes' %}"
+           class="rounded-xl px-4 py-2 border hover:bg-gray-50 text-center focus:outline-none focus:ring-2 focus:ring-slate-300">Limpar</a>
+      </form>
+    </section>
   </div>
 
+  {# =================== TABELA =================== #}
   <div class="overflow-x-auto rounded-2xl border bg-white">
     <table class="min-w-full text-sm">
-      <thead class="bg-gray-50 text-left">
+      <thead class="bg-gray-50 text-left sticky top-0 z-10">
         <tr>
-          <th class="px-4 py-3 font-semibold">Criado</th>
-          <th class="px-4 py-3 font-semibold">Cliente</th>
-          <th class="px-4 py-3 font-semibold">Serviço</th>
-          <th class="px-4 py-3 font-semibold">Início</th>
-          <th class="px-4 py-3 font-semibold">Status</th>
-          <th class="px-4 py-3 font-semibold text-right">Ações</th>
+          <th class="px-4 py-3 font-semibold text-gray-700">Criado</th>
+          <th class="px-4 py-3 font-semibold text-gray-700">Cliente</th>
+          <th class="px-4 py-3 font-semibold text-gray-700">Serviço</th>
+          <th class="px-4 py-3 font-semibold text-gray-700">Início</th>
+          <th class="px-4 py-3 font-semibold text-gray-700">Status</th>
+          <th class="px-4 py-3 font-semibold text-right text-gray-700">Ações</th>
         </tr>
       </thead>
+
       <tbody class="divide-y" id="rows">
         {% for s in solicitacoes %}
         <tr id="row-{{ s.id }}" class="hover:bg-gray-50">
-          <td class="px-4 py-3">
+          {# Criado #}
+          <td class="px-4 py-3 align-top">
             <div class="font-medium">{{ s.criado_em|date:"d/m/Y H:i" }}</div>
-            {% if s.id_externo %}<div class="text-gray-500 text-xs">#{{ s.id_externo }}</div>{% endif %}
+            {% if s.id_externo %}
+              <div class="text-gray-500 text-xs">#{{ s.id_externo }}</div>
+            {% endif %}
           </td>
 
-          {# Cliente: usa snapshot ou FK, depois telefone #}
-          <td class="px-4 py-3">
-            <div class="font-medium">{% firstof s.nome s.cliente.nome "—" %}</div>
-            <div class="text-gray-500">{% firstof s.telefone s.cliente.telefone "—" %}</div>
+          {# Cliente #}
+          <td class="px-4 py-3 align-top">
+            <div class="font-medium truncate max-w-[220px]">{% firstof s.nome s.cliente.nome "—" %}</div>
+            <div class="text-gray-500 truncate max-w-[220px]">{% firstof s.telefone s.cliente.telefone "—" %}</div>
           </td>
 
           {# Serviço + duração #}
-          <td class="px-4 py-3">
-            {{ s.servico_label }}
+          <td class="px-4 py-3 align-top">
+            <div class="truncate max-w-[240px]">{{ s.servico_label }}</div>
             {% if s.duracao_min_cotada %}
-              <span class="ml-1 text-xs text-gray-500">({{ s.duracao_min_cotada }}min)</span>
+              <div class="text-xs text-gray-500 mt-0.5">({{ s.duracao_min_cotada }} min)</div>
             {% elif s.servico and s.servico.duracao_min %}
-              <span class="ml-1 text-xs text-gray-500">({{ s.servico.duracao_min }}min)</span>
+              <div class="text-xs text-gray-500 mt-0.5">({{ s.servico.duracao_min }} min)</div>
             {% endif %}
           </td>
 
-          <td class="px-4 py-3">
-            {% if s.inicio %}{{ s.inicio|date:"d/m/Y H:i" }}{% else %}—{% endif %}
-          </td>
-
-          {# ✅ Coluna de Status (com id para o JS atualizar) #}
-          <td class="px-4 py-3" id="status-{{ s.id }}">
-            {% if s.status == "PENDENTE" %}
-              <span class="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-800">● Pendente</span>
-            {% elif s.status == "CONFIRMADA" %}
-              <span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-green-800">● Confirmada</span>
-            {% elif s.status == "NEGADA" %}
-              <span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-red-800">● Negada</span>
-            {% elif s.status == "REALIZADA" %}
-              <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-blue-800">● Realizada</span>
+          {# Início #}
+          <td class="px-4 py-3 align-top">
+            {% if s.inicio %}
+              {{ s.inicio|date:"d/m/Y H:i" }}
             {% else %}
-              <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-gray-800">● {{ s.status }}</span>
+              —
             {% endif %}
           </td>
 
-          <td class="px-4 py-3" id="actions-{{ s.id }}">
-            <div class="flex justify-end gap-2">
-              <a href="{% url 'solicitacoes:detalhe' s.id %}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Ver</a>
+          {# Status #}
+          <td class="px-4 py-3 align-top" id="status-{{ s.id }}">
+            {% if s.status == "PENDENTE" %}
+              <span class="status-badge bg-amber-100 text-amber-800">● Pendente</span>
+            {% elif s.status == "CONFIRMADA" %}
+              <span class="status-badge bg-emerald-100 text-emerald-800">● Confirmada</span>
+            {% elif s.status == "NEGADA" %}
+              <span class="status-badge bg-rose-100 text-rose-800">● Negada</span>
+            {% elif s.status == "REALIZADA" %}
+              <span class="status-badge bg-blue-100 text-blue-800">● Realizada</span>
+            {% else %}
+              <span class="status-badge bg-gray-100 text-gray-800">● {{ s.status }}</span>
+            {% endif %}
+          </td>
 
-              {# Atalho para criar atendimento a partir da solicitação #}
-              <a href="{% url 'agendamentos:agendamento_novo_para_solicitacao' s.id %}"
-                 class="rounded-xl bg-indigo-600 text-white px-3 py-1.5 hover:bg-indigo-700">Adicionar atendimento</a>
+          {# Ações #}
+          <td class="px-4 py-3 align-top" id="actions-{{ s.id }}">
+            <div class="flex justify-end gap-2">
+              <a href="{% url 'solicitacoes:detalhe' s.id %}"
+                 class="btn-action border hover:bg-gray-50">Ver</a>
 
               {% if s.status == "PENDENTE" %}
                 <button type="button"
-                        class="rounded-xl bg-black text-white px-3 py-1.5 hover:opacity-90"
+                        class="btn-action bg-black text-white hover:opacity-90"
                         data-id="{{ s.id }}"
                         data-nome="{% firstof s.nome s.cliente.nome s.telefone %}"
                         data-telefone="{% firstof s.telefone s.cliente.telefone '' %}"
@@ -112,58 +134,73 @@
                         onclick="openConfirm(this)">Confirmar</button>
 
                 <button type="button"
-                        class="rounded-xl bg-red-600 text-white px-3 py-1.5 hover:bg-red-700"
+                        class="btn-action bg-rose-600 text-white hover:bg-rose-700"
                         data-id="{{ s.id }}"
                         data-cliente="{% firstof s.nome s.cliente.nome s.telefone %}"
                         onclick="openDeny(this)">Negar</button>
+
               {% elif s.status == "CONFIRMADA" %}
                 <button type="button"
-                        class="rounded-xl bg-emerald-600 text-white px-3 py-1.5 hover:bg-emerald-700"
+                        class="btn-action bg-emerald-600 text-white hover:bg-emerald-700"
                         onclick="submitFinalize({{ s.id }})">Finalizar</button>
+
                 <button type="button"
-                        class="rounded-xl border px-3 py-1.5 hover:bg-gray-50"
+                        class="btn-action border hover:bg-gray-50"
                         onclick="submitNoShow({{ s.id }})">No-show</button>
               {% endif %}
             </div>
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Nenhuma solicitação.</td></tr>
+        <tr>
+          <td colspan="6" class="px-4 py-10 text-center text-gray-500">
+            Nenhuma solicitação encontrada.
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 
+  {# =================== PAGINAÇÃO =================== #}
   {% if page_obj and page_obj.paginator.num_pages > 1 %}
   <div class="mt-6 flex items-center justify-between">
-    <div class="text-sm text-gray-600">
+    <p class="text-sm text-gray-600">
       Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }} · {{ page_obj.paginator.count }} registros
-    </div>
+    </p>
     <div class="flex items-center gap-2">
       {% if page_obj.has_previous %}
-        <a class="rounded-xl border px-3 py-1.5 hover:bg-gray-50"
+        <a class="btn-action border hover:bg-gray-50"
            href="?{% if request.GET %}{{ request.GET.urlencode|safe }}&{% endif %}page={{ page_obj.previous_page_number }}">Anterior</a>
       {% else %}
-        <span class="rounded-xl border px-3 py-1.5 text-gray-400">Anterior</span>
+        <span class="btn-action border text-gray-400">Anterior</span>
       {% endif %}
+
       {% if page_obj.has_next %}
-        <a class="rounded-xl border px-3 py-1.5 hover:bg-gray-50"
+        <a class="btn-action border hover:bg-gray-50"
            href="?{% if request.GET %}{{ request.GET.urlencode|safe }}&{% endif %}page={{ page_obj.next_page_number }}">Próxima</a>
       {% else %}
-        <span class="rounded-xl border px-3 py-1.5 text-gray-400">Próxima</span>
+        <span class="btn-action border text-gray-400">Próxima</span>
       {% endif %}
     </div>
   </div>
   {% endif %}
 </div>
 
-{# ============== SLIDE-OVER: CONFIRMAR ============== #}
+{# =================== ESTILOS UTILITÁRIOS =================== #}
+<style>
+  .status-badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
+  .btn-action    { @apply inline-flex items-center justify-center rounded-xl px-3 py-1.5 text-sm transition; }
+</style>
+
+{# =================== MODAIS & TOAST =================== #}
+<!-- SLIDE-OVER: CONFIRMAR -->
 <div id="confirmPanel" class="fixed inset-0 z-40 hidden" aria-hidden="true">
   <div class="absolute inset-0 bg-black/40" onclick="closeConfirm()"></div>
   <div class="absolute right-0 top-0 h-full w-full max-w-md bg-white shadow-xl flex flex-col">
     <div class="p-4 border-b flex items-center justify-between">
       <h2 class="text-lg font-semibold">Confirmar solicitação</h2>
-      <button type="button" class="rounded-lg border px-3 py-1.5" onclick="closeConfirm()">Fechar</button>
+      <button type="button" class="rounded-lg border px-3 py-1.5 hover:bg-gray-50" onclick="closeConfirm()">Fechar</button>
     </div>
     <form id="confirmForm" class="p-4 space-y-4" onsubmit="return false">
       {% csrf_token %}
@@ -177,7 +214,6 @@
 
       <div>
         <div class="text-sm text-gray-500 mb-1">Serviço</div>
-
         {% if servicos %}
           <select id="confirm-servico-id" name="servico_id" class="w-full rounded-xl border px-3 py-2"
                   onchange="onServicoChange()">
@@ -201,34 +237,36 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-sm text-gray-600 mb-1">Início</label>
-          <input type="datetime-local" name="inicio" id="confirm-inicio" class="w-full rounded-xl border px-3 py-2">
-          <p class="text-xs text-gray-500 mt-1">O término será calculado pela duração.</p>
+          <input type="datetime-local" name="inicio" id="confirm-inicio"
+                 class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300">
+          <p class="text-xs text-gray-500 mt-1">O término é calculado pela duração do serviço.</p>
         </div>
         <div>
           <label class="block text-sm text-gray-600 mb-1">Preço (R$)</label>
           <input type="number" step="0.01" min="0" name="preco_cotado" id="confirm-preco"
-                 class="w-full rounded-xl border px-3 py-2" placeholder="Ex.: 45,00">
-          <p class="text-xs text-gray-500 mt-1">Pode ajustar caso necessário.</p>
+                 class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300"
+                 placeholder="Ex.: 45,00">
         </div>
       </div>
 
       <div id="confirm-fim-preview" class="text-sm text-gray-600"></div>
 
       <div class="pt-2">
-        <button type="button" class="w-full rounded-xl bg-black text-white px-4 py-2 hover:opacity-90"
+        <button type="button"
+                class="w-full rounded-xl bg-black text-white px-4 py-2 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-black/40"
                 onclick="submitConfirm()">Confirmar</button>
       </div>
     </form>
   </div>
 </div>
 
-{# ============== MODAL: NEGAR ============== #}
+<!-- MODAL: NEGAR -->
 <div id="denyModal" class="fixed inset-0 z-40 hidden" aria-hidden="true">
   <div class="absolute inset-0 bg-black/40" onclick="closeDeny()"></div>
   <div class="absolute inset-0 m-auto h-fit w-full max-w-md bg-white rounded-2xl shadow-xl">
     <div class="p-4 border-b flex items-center justify-between">
       <h2 class="text-lg font-semibold">Negar solicitação</h2>
-      <button type="button" class="rounded-lg border px-3 py-1.5" onclick="closeDeny()">Fechar</button>
+      <button type="button" class="rounded-lg border px-3 py-1.5 hover:bg-gray-50" onclick="closeDeny()">Fechar</button>
     </div>
     <form id="denyForm" class="p-4 space-y-4" onsubmit="return false">
       {% csrf_token %}
@@ -237,24 +275,27 @@
       <p class="text-sm">Você está negando a solicitação de <span id="deny-cliente" class="font-medium">—</span>.</p>
       <div>
         <label class="block text-sm text-gray-600 mb-1">Motivo (opcional)</label>
-        <textarea name="motivo" id="deny-motivo" rows="3" class="w-full rounded-xl border px-3 py-2"
+        <textarea name="motivo" id="deny-motivo" rows="3"
+                  class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300"
                   placeholder="Ex.: indisponibilidade de horário"></textarea>
       </div>
       <div class="pt-2">
-        <button type="button" class="w-full rounded-xl bg-red-600 text-white px-4 py-2 hover:bg-red-700"
+        <button type="button"
+                class="w-full rounded-xl bg-rose-600 text-white px-4 py-2 hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500/50"
                 onclick="submitDeny()">Confirmar negação</button>
       </div>
     </form>
   </div>
 </div>
 
-{# ============== TOAST ============== #}
+<!-- TOAST -->
 <div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 hidden">
   <div class="rounded-xl bg-black text-white px-4 py-2 shadow-lg" id="toast-text">OK</div>
 </div>
 
-{# ============== JS ============== #}
+{# =================== JS =================== #}
 <script>
+  // ---------- URLs (padronize aqui se mudar suas rotas)
   const URL_DETALHE_PATTERN   = "{% url 'solicitacoes:detalhe' 0 %}";
   const URL_CONFIRMAR_PATTERN = "{% url 'solicitacoes:confirmar' 0 %}";
   const URL_RECUSAR_PATTERN   = "{% url 'solicitacoes:recusar' 0 %}";
@@ -267,6 +308,7 @@
   const finUrl    = (id) => URL_FINALIZAR_PATTERN.replace('/0/', `/${id}/`);
   const noshowUrl = (id) => URL_NOSHOW_PATTERN.replace('/0/', `/${id}/`);
 
+  // ---------- Utils
   function getCSRFCookie() {
     const input = document.querySelector('input[name=csrfmiddlewaretoken]');
     if (input) return input.value;
@@ -277,7 +319,8 @@
   }
   function showToast(msg) {
     const t = document.getElementById('toast'), tt = document.getElementById('toast-text');
-    tt.textContent = msg; t.classList.remove('hidden'); setTimeout(()=> t.classList.add('hidden'), 2200);
+    tt.textContent = msg; t.classList.remove('hidden');
+    setTimeout(()=> t.classList.add('hidden'), 2200);
   }
   const ymdhm = (date) => {
     const p=n=>String(n).padStart(2,'0');
@@ -285,6 +328,7 @@
   };
   const addMinutes = (date, mins) => new Date(date.getTime() + mins*60000);
 
+  // ---------- Confirmar (slide-over)
   function updateFimPreview() {
     const dur = parseInt(document.getElementById('confirm-duracao')?.dataset.dur || '0', 10);
     const iniStr = document.getElementById('confirm-inicio').value;
@@ -294,10 +338,8 @@
       out.textContent = 'Término estimado: ' + f.toLocaleString();
     } else { out.textContent = ''; }
   }
-
   function onServicoChange() {
-    const sel = document.getElementById('confirm-servico-id');
-    if (!sel) return;
+    const sel = document.getElementById('confirm-servico-id'); if (!sel) return;
     const opt = sel.options[sel.selectedIndex];
     const dur = parseInt(opt.getAttribute('data-dur') || '0', 10);
     const val = opt.getAttribute('data-valor') || '';
@@ -310,15 +352,17 @@
     if (val && !precoEl.value) { precoEl.value = val; }
     updateFimPreview();
   }
-
   function openConfirm(btn) {
-    const id = btn.dataset.id, nome = btn.dataset.nome || '', tel = btn.dataset.telefone || '';
-    const inicioISO = btn.dataset.inicio || '';
-    const servicoNome = btn.dataset.servico || '';
-    const duracaoMin = parseInt(btn.dataset.duracao || '0', 10);
-    const servicoId = btn.dataset.servicoId || btn.dataset.servicoid || '';
-    const preco = btn.dataset.preco || '';
+    const id = btn.dataset.id,
+          nome = btn.dataset.nome || '',
+          tel = btn.dataset.telefone || '',
+          inicioISO = btn.dataset.inicio || '',
+          servicoNome = btn.dataset.servico || '',
+          duracaoMin = parseInt(btn.dataset.duracao || '0', 10),
+          servicoId = btn.dataset.servicoId || btn.dataset.servicoid || '',
+          preco = btn.dataset.preco || '';
 
+    // Preenche campos
     document.getElementById('confirm-id').value = id;
     document.getElementById('confirm-cliente').textContent = (nome || tel || '—');
 
@@ -350,6 +394,7 @@
     const precoEl = document.getElementById('confirm-preco');
     if (precoEl) { precoEl.value = preco || precoEl.value || ''; }
 
+    // Define horário arredondado para os próximos 5 minutos
     const now = new Date();
     const rounded = new Date(Math.ceil(now.getTime() / (5*60000)) * (5*60000));
     document.getElementById('confirm-inicio').value = inicioISO || ymdhm(rounded);
@@ -380,24 +425,19 @@
     if (res.ok) {
       const row = document.getElementById(`row-${id}`);
       if (row) {
-        const inicioCell = row.querySelectorAll('td')[3]; if (inicioCell) inicioCell.textContent = new Date(inicio).toLocaleString();
-        const statusCell = document.getElementById(`status-${id}`); if (statusCell) statusCell.innerHTML = '<span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-green-800">● Confirmada</span>';
-        const actionsCell = document.getElementById(`actions-${id}`); if (actionsCell) actionsCell.innerHTML =
+        const inicioCell = row.querySelectorAll('td')[3];
+        if (inicioCell) inicioCell.textContent = new Date(inicio).toLocaleString();
+        const statusCell = document.getElementById(`status-${id}`);
+        if (statusCell) statusCell.innerHTML = '<span class="status-badge bg-emerald-100 text-emerald-800">● Confirmada</span>';
+        const actionsCell = document.getElementById(`actions-${id}`);
+        if (actionsCell) actionsCell.innerHTML =
           `<div class="flex justify-end gap-2">
-             <a href="${detUrl(id)}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Ver</a>
-             <button type="button" class="rounded-xl bg-emerald-600 text-white px-3 py-1.5 hover:bg-emerald-700" onclick="submitFinalize(${id})">Finalizar</button>
-             <button type="button" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50" onclick="submitNoShow(${id})">No-show</button>
+             <a href="${detUrl(id)}" class="btn-action border hover:bg-gray-50">Ver</a>
+             <button type="button" class="btn-action bg-emerald-600 text-white hover:bg-emerald-700" onclick="submitFinalize(${id})">Finalizar</button>
+             <button type="button" class="btn-action border hover:bg-gray-50" onclick="submitNoShow(${id})">No-show</button>
            </div>`;
-        if (sel) {
-          const srvCell = row.querySelectorAll('td')[2];
-          const opt = sel.options[sel.selectedIndex];
-          if (srvCell && opt && opt.value){
-            const dur = opt.getAttribute('data-dur') || '';
-            srvCell.innerHTML = opt.textContent + (dur ? ` <span class="ml-1 text-xs text-gray-500">(${dur}min)</span>` : '');
-          }
-        }
       }
-      showToast('Solicitação confirmada.'); closeConfirm();
+      closeConfirm(); showToast('Solicitação confirmada.');
     } else {
       try {
         const j = await res.json();
@@ -407,6 +447,7 @@
     }
   }
 
+  // ---------- Negar (modal)
   function openDeny(btn) {
     document.getElementById('deny-id').value = btn.dataset.id;
     document.getElementById('deny-cliente').textContent = btn.dataset.cliente || 'cliente';
@@ -414,6 +455,7 @@
     document.getElementById('denyModal').classList.remove('hidden');
   }
   function closeDeny() { document.getElementById('denyModal').classList.add('hidden'); }
+
   async function submitDeny() {
     const id = document.getElementById('deny-id').value;
     const motivo = document.getElementById('deny-motivo').value || '';
@@ -429,13 +471,19 @@
     });
     if (res.ok) {
       const statusCell = document.getElementById(`status-${id}`);
-      if (statusCell) statusCell.innerHTML = '<span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-red-800">● Negada</span>';
+      if (statusCell) statusCell.innerHTML = '<span class="status-badge bg-rose-100 text-rose-800">● Negada</span>';
       const actionsCell = document.getElementById(`actions-${id}`);
-      if (actionsCell) actionsCell.innerHTML = `<div class="flex justify-end gap-2"><a href="${detUrl(id)}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Ver</a></div>`;
-      showToast('Solicitação negada.'); closeDeny();
-    } else { showToast('Falha ao negar.'); }
+      if (actionsCell) actionsCell.innerHTML =
+        `<div class="flex justify-end gap-2">
+           <a href="${detUrl(id)}" class="btn-action border hover:bg-gray-50">Ver</a>
+         </div>`;
+      closeDeny(); showToast('Solicitação negada.');
+    } else {
+      showToast('Falha ao negar.');
+    }
   }
 
+  // ---------- Finalizar e No-show
   async function submitFinalize(id) {
     const res = await fetch(finUrl(id), {
       method: 'POST',
@@ -447,9 +495,12 @@
     });
     if (res.ok) {
       const statusCell = document.getElementById(`status-${id}`);
-      if (statusCell) statusCell.innerHTML = '<span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-blue-800">● Realizada</span>';
+      if (statusCell) statusCell.innerHTML = '<span class="status-badge bg-blue-100 text-blue-800">● Realizada</span>';
       const actionsCell = document.getElementById(`actions-${id}`);
-      if (actionsCell) actionsCell.innerHTML = `<div class="flex justify-end gap-2"><a href="${detUrl(id)}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Ver</a></div>`;
+      if (actionsCell) actionsCell.innerHTML =
+        `<div class="flex justify-end gap-2">
+           <a href="${detUrl(id)}" class="btn-action border hover:bg-gray-50">Ver</a>
+         </div>`;
       showToast('Serviço finalizado.');
     } else {
       showToast('Ainda não é possível finalizar (verifique o horário).');
@@ -468,18 +519,18 @@
     if (res.ok) {
       showToast('No-show registrado.');
       const statusCell = document.getElementById(`status-${id}`);
-      if (statusCell && !statusCell.querySelector('[data-noshow]')) {
-        const tag = document.createElement('span');
-        tag.setAttribute('data-noshow','1');
-        tag.className = 'ml-2 inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-gray-700';
-        tag.textContent = 'No-show';
-        statusCell.appendChild(tag);
-      }
+      if (statusCell) statusCell.innerHTML = '<span class="status-badge bg-gray-100 text-gray-800">● No-show</span>';
+      const actionsCell = document.getElementById(`actions-${id}`);
+      if (actionsCell) actionsCell.innerHTML =
+        `<div class="flex justify-end gap-2">
+           <a href="${detUrl(id)}" class="btn-action border hover:bg-gray-50">Ver</a>
+         </div>`;
     } else {
       showToast('Falha ao registrar no-show.');
     }
   }
 
+  // ---------- Listeners
   document.addEventListener('input', (e) => {
     if (e.target && e.target.id === 'confirm-inicio') updateFimPreview();
   });

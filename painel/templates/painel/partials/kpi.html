@@ -1,0 +1,25 @@
+{% load humanize %}
+
+<div class="card p-4">
+  <div class="flex items-center justify-between">
+    <div class="text-xs text-slate-500">{{ label }}</div>
+    <div>{{ icon }}</div>
+  </div>
+  <div class="kpi-val">
+    {% if money %}
+      R$ {{ val|default:0|floatformat:2|intcomma }}
+    {% else %}
+      {{ val|default:0 }}
+    {% endif %}
+  </div>
+  <div class="mt-1">
+    {% with pct=delta %}
+      {% if pct != None %}
+        <span class="pill {% if pct >= 0 %}bg-emerald-100 text-emerald-700{% else %}bg-rose-100 text-rose-700{% endif %}">
+          {% if pct >= 0 %}▲{% else %}▼{% endif %} {{ pct|floatformat:1 }}% vs mês ant.
+        </span>
+      {% endif %}
+    {% endwith %}
+  </div>
+  <div class="kpi-hint">{{ hint }}</div>
+</div>

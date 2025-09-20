@@ -5,86 +5,87 @@
 {% block content %}
 {% include "agendamentos/_agenda_tabs.html" %}
 
-<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+<div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
 
   <!-- Cabeçalho -->
-  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 border-b border-gray-200">
-    <div class="font-semibold">Dia {{ date|date:"d/m/Y" }}</div>
-    <div class="flex items-center gap-2">
-      <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+  <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-blue-100 text-blue-600">📅</span>
+      Dia {{ date|date:"d/m/Y" }}
+    </h2>
+    <div class="flex gap-2">
+      <a class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-sm"
          href="{% url 'agendamentos:agenda_dia' %}?dia={{ prev_day|date:'Y-m-d' }}">← Anterior</a>
-      <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+      <a class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-sm"
          href="{% url 'agendamentos:agenda_dia' %}?dia={{ next_day|date:'Y-m-d' }}">Próximo →</a>
     </div>
   </div>
 
-  <!-- Legenda -->
-  <div class="px-4 py-2 border-b border-gray-100">
-    <div class="flex flex-wrap items-center gap-2 text-xs">
-      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5">Livre</span>
-      <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">Almoço</span>
-      <span class="inline-flex items-center gap-1 rounded-full bg-slate-200 text-slate-700 px-2 py-0.5">Folga</span>
-      <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-700 px-2 py-0.5">Ocupado</span>
-      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-200 text-emerald-900 px-2 py-0.5">Agendamento</span>
-    </div>
+  <!-- GRID DE PERÍODOS -->
+  <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+
+    <!-- ================== MANHÃ ================== -->
+    <section class="p-6">
+      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+        🌅 Manhã
+      </h3>
+      <div class="relative">
+        <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
+        <div class="space-y-6">
+          {% for row in rows %}
+            {% if row.time.hour < 12 %}
+              <div class="relative pl-14">
+                {% include "agendamentos/_agenda_card.html" with row=row %}
+              </div>
+            {% endif %}
+          {% empty %}
+            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <!-- ================== TARDE ================== -->
+    <section class="p-6">
+      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+        🌇 Tarde
+      </h3>
+      <div class="relative">
+        <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
+        <div class="space-y-6">
+          {% for row in rows %}
+            {% if row.time.hour >= 12 and row.time.hour < 18 %}
+              <div class="relative pl-14">
+                {% include "agendamentos/_agenda_card.html" with row=row %}
+              </div>
+            {% endif %}
+          {% empty %}
+            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <!-- ================== NOITE ================== -->
+    <section class="p-6">
+      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+        🌙 Noite
+      </h3>
+      <div class="relative">
+        <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
+        <div class="space-y-6">
+          {% for row in rows %}
+            {% if row.time.hour >= 18 %}
+              <div class="relative pl-14">
+                {% include "agendamentos/_agenda_card.html" with row=row %}
+              </div>
+            {% endif %}
+          {% empty %}
+            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
   </div>
-
-  <!-- Lista de horários -->
-  <ul class="divide-y divide-gray-100">
-    {% for row in rows %}
-      <li class="flex items-center justify-between px-4 py-2">
-        <!-- Hora -->
-        <div class="w-16 shrink-0 text-sm text-gray-500">{{ row.time|date:"H:i" }}</div>
-
-        {% if row.item %}
-          <!-- Agendamento no slot inicial -->
-          <div class="flex-1 mx-4 min-w-0">
-            <div class="font-medium text-gray-900 truncate">{{ row.item.cliente_nome }}</div>
-            <div class="text-xs text-gray-600 truncate">{{ row.item.servico_nome }}</div>
-            {% if row.item.fim %}
-              <div class="text-[11px] text-gray-400 mt-0.5">até {{ row.item.fim|date:"H:i" }}</div>
-            {% endif %}
-            {% if row.conflicts and row.conflicts > 0 %}
-              <div class="text-[11px] text-rose-700 mt-0.5">Atenção: conflito com +{{ row.conflicts }} agendamento(s)</div>
-            {% endif %}
-          </div>
-          <span class="text-xs px-2 py-1 rounded-full
-            {% if row.item.status == 'CONFIRMADA' %} bg-emerald-100 text-emerald-700
-            {% elif row.item.status == 'PENDENTE' %}  bg-amber-100 text-amber-700
-            {% elif row.item.status == 'NEGADA' %}    bg-rose-100 text-rose-700
-            {% else %}                                  bg-gray-100 text-gray-700 {% endif %}">
-            {{ row.item.status }}
-          </span>
-          <a href="{% url 'solicitacoes:detalhe' row.item.id %}"
-             class="ml-3 text-xs px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50">
-            Ver
-          </a>
-
-        {% elif row.occupied %}
-          <!-- Dentro do intervalo de um agendamento (não é início) -->
-          <div class="flex-1 mx-4 text-xs text-gray-500">Ocupado</div>
-          <span class="text-[11px] px-2 py-1 rounded-full bg-gray-100 text-gray-600">—</span>
-
-        {% else %}
-          <!-- Slots base (Livre / Almoço / Folga) -->
-          {% if not row.available and row.reason == 'almoco' %}
-            <div class="flex-1 mx-4 text-xs text-amber-700">Almoço</div>
-            <span class="text-[11px] px-2 py-1 rounded-full bg-amber-100 text-amber-800">—</span>
-          {% elif not row.available and row.reason == 'folga' %}
-            <div class="flex-1 mx-4 text-xs text-slate-700">Folga</div>
-            <span class="text-[11px] px-2 py-1 rounded-full bg-slate-200 text-slate-700">—</span>
-          {% else %}
-            <div class="flex-1 mx-4 text-xs text-emerald-700">Livre</div>
-            <a href="{% url 'solicitacoes:solicitacoes' %}?q=&inicio={{ row.time|date:'Y-m-d\\TH:i' }}"
-               class="text-xs px-2 py-1 rounded border border-gray-300 bg-white hover:bg-gray-50">
-              Agendar
-            </a>
-          {% endif %}
-        {% endif %}
-      </li>
-    {% empty %}
-      <li class="px-4 py-8 text-center text-gray-500 text-sm">Dia desativado.</li>
-    {% endfor %}
-  </ul>
 </div>
 {% endblock %}

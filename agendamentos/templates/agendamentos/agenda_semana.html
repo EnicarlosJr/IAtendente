@@ -9,9 +9,7 @@
 
   <!-- Cabeçalho -->
   <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 border-b border-gray-200">
-    <div class="font-semibold">
-      {{ wk_start|date:"d/M" }} — {{ wk_end|date:"d/M" }}
-    </div>
+    <div class="font-semibold text-lg">📅 Semana: {{ wk_start|date:"d/M" }} — {{ wk_end|date:"d/M" }}</div>
     <div class="flex gap-2">
       <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
          href="{% url 'agendamentos:agenda_semana' %}?data={{ prev_week|date:'Y-m-d' }}">← Semana anterior</a>
@@ -23,87 +21,93 @@
   <!-- Legenda -->
   <div class="px-4 py-2 border-b border-gray-100">
     <div class="flex flex-wrap items-center gap-2 text-xs">
-      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-800 px-2 py-0.5">Livre</span>
-      <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5">Almoço</span>
-      <span class="inline-flex items-center gap-1 rounded-full bg-slate-200 text-slate-700 px-2 py-0.5">Folga</span>
-      <span class="inline-flex items-center gap-1 rounded-full bg-gray-100 text-gray-700 px-2 py-0.5">Ocupado</span>
-      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-200 text-emerald-900 px-2 py-0.5">Agendamento</span>
+      <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Livre</span>
+      <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Almoço</span>
+      <span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Folga</span>
+      <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">Ocupado</span>
+      <span class="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">Agendamento</span>
     </div>
   </div>
 
-  <!-- Cabeçalho das colunas (dias) -->
-  <div class="grid grid-cols-8 bg-gray-50 border-b border-gray-200">
-    <div class="py-2 px-3 text-xs font-medium text-gray-600">Hora</div>
-    {% for col in days_ctx %}
-      <div class="py-2 text-center text-xs font-medium text-gray-600">
-        {{ col.label }}<br><span class="text-[11px] text-gray-500">{{ col.date|date:"d/M" }}</span>
-      </div>
-    {% endfor %}
-  </div>
-
-  <!-- Linhas de horários -->
-  <div>
-    {% for r in rows %}
-      <div class="grid grid-cols-8 border-b border-gray-100">
-        <!-- Coluna do horário -->
-        <div class="px-3 py-2 text-xs text-gray-600">{{ r.time|date:"H:i" }}</div>
-
-        <!-- 7 colunas/dia -->
-        {% for c in r.cells %}
-          <div class="px-2 py-2 border-l border-gray-50">
-            {% if c.item %}
-              <!-- Card de agendamento (slot de início) -->
-              <div class="rounded-lg border border-gray-200 p-2 bg-white shadow-sm">
-                <div class="text-[11px] text-gray-500">
-                  {{ c.item.inicio|date:"H:i" }}–{{ c.item.fim|date:"H:i" }}
-                </div>
-                <div class="text-sm font-medium truncate">{{ c.item.cliente_nome }}</div>
-                <div class="text-xs text-gray-600 truncate">{{ c.item.servico_nome }}</div>
-                {% if c.conflicts and c.conflicts > 0 %}
-                  <div class="text-[11px] text-rose-700 mt-0.5">Conflito com +{{ c.conflicts }}</div>
-                {% endif %}
-                <span class="mt-1 inline-block text-[11px] px-2 py-0.5 rounded-full
-                  {% if c.item.status == 'CONFIRMADA' or c.item.status == 'CONFIRMADO' %} bg-emerald-100 text-emerald-700
-                  {% elif c.item.status == 'PENDENTE' %}                         bg-amber-100 text-amber-700
-                  {% elif c.item.status == 'NEGADA' or c.item.status == 'CANCELADA' %} bg-rose-100 text-rose-700
-                  {% else %}                                                     bg-gray-100 text-gray-700 {% endif %}">
-                  {{ c.item.status }}
-                </span>
-                <div class="mt-2">
-                  <a href="{% url 'solicitacoes:detalhe' c.item.id %}"
-                     class="text-[11px] underline">Ver</a>
-                </div>
-              </div>
-
-            {% elif c.occupied %}
-              <!-- Slot dentro do intervalo de um agendamento já iniciado -->
-              <div class="rounded-lg border border-dashed border-gray-300 p-2 bg-gray-50 text-center text-[11px] text-gray-500">
-                Ocupado
-              </div>
-
-            {% else %}
-              <!-- Base (Livre / Almoço / Folga) quando não há agendamento sobreposto -->
-              {% if not c.available and c.reason == 'almoco' %}
-                <div class="rounded-lg p-2 text-center bg-amber-50 border border-amber-100">
-                  <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 inline-block">Almoço</span>
-                </div>
-              {% elif not c.available and c.reason == 'folga' %}
-                <div class="rounded-lg p-2 text-center bg-slate-50 border border-slate-200">
-                  <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 inline-block">Folga</span>
-                </div>
-              {% else %}
-                <div class="rounded-lg border border-dashed border-emerald-200 p-2 bg-white text-center">
-                  <a href="{% url 'solicitacoes:solicitacoes' %}?inicio={{ c.time|date:'Y-m-d\\TH:i' }}"
-                     class="text-[11px] px-2 py-0.5 rounded border border-gray-300 bg-white hover:bg-gray-50 inline-block">
-                    Livre · Agendar
-                  </a>
-                </div>
-              {% endif %}
-            {% endif %}
+  <!-- Grade principal (scroll em telas menores) -->
+  <div class="overflow-x-auto">
+    <div class="min-w-[900px]">
+      <!-- Cabeçalho dos dias -->
+      <div class="grid grid-cols-8 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-600">
+        <div class="py-2 px-3">Hora</div>
+        {% for col in days_ctx %}
+          <div class="py-2 text-center">
+            {{ col.label }}<br>
+            <span class="text-[11px] text-gray-500">{{ col.date|date:"d/M" }}</span>
           </div>
         {% endfor %}
       </div>
-    {% endfor %}
+
+      <!-- Linhas de horários -->
+      {% for r in rows %}
+        <div class="grid grid-cols-8 border-b border-gray-100 text-xs">
+          <!-- Coluna da hora -->
+          <div class="px-3 py-2 text-gray-600 font-medium">{{ r.time|date:"H:i" }}</div>
+
+          <!-- Colunas de cada dia -->
+          {% for c in r.cells %}
+            <div class="px-2 py-2 border-l border-gray-50">
+              {% if c.item %}
+                <!-- Agendamento -->
+                <div class="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2 shadow-sm">
+                  <div class="text-[11px] text-gray-500">
+                    {{ c.item.inicio|date:"H:i" }}–{{ c.item.fim|date:"H:i" }}
+                  </div>
+                  <div class="text-sm font-medium truncate">{{ c.item.cliente_nome }}</div>
+                  <div class="text-xs text-gray-600 truncate">{{ c.item.servico_nome }}</div>
+                  {% if c.conflicts and c.conflicts > 0 %}
+                    <div class="text-[11px] text-rose-700 mt-0.5">⚠️ +{{ c.conflicts }} conflito(s)</div>
+                  {% endif %}
+                  <span class="mt-1 inline-block text-[11px] px-2 py-0.5 rounded-full
+                    {% if c.item.status == 'CONFIRMADA' or c.item.status == 'CONFIRMADO' %} bg-emerald-100 text-emerald-700
+                    {% elif c.item.status == 'PENDENTE' %} bg-amber-100 text-amber-700
+                    {% elif c.item.status == 'NEGADA' or c.item.status == 'CANCELADA' %} bg-rose-100 text-rose-700
+                    {% else %} bg-gray-100 text-gray-700 {% endif %}">
+                    {{ c.item.status }}
+                  </span>
+                  <div class="mt-2">
+                    <a href="{% url 'solicitacoes:detalhe' c.item.id %}"
+                       class="text-[11px] underline">Ver detalhes</a>
+                  </div>
+                </div>
+
+              {% elif c.occupied %}
+                <!-- Ocupado -->
+                <div class="rounded-lg border border-dashed border-gray-300 p-2 bg-gray-50 text-center text-gray-500">
+                  Ocupado
+                </div>
+
+              {% else %}
+                <!-- Livre / Almoço / Folga -->
+                {% if not c.available and c.reason == 'almoco' %}
+                  <div class="rounded-lg p-2 text-center bg-amber-50 border border-amber-100">
+                    <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">🍽️ Almoço</span>
+                  </div>
+                {% elif not c.available and c.reason == 'folga' %}
+                  <div class="rounded-lg p-2 text-center bg-slate-50 border border-slate-200">
+                    <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">🛑 Folga</span>
+                  </div>
+                {% else %}
+                  <div class="rounded-lg border border-dashed border-emerald-200 p-2 bg-white text-center">
+                    <a href="{% url 'solicitacoes:solicitacoes' %}?inicio={{ c.time|date:'Y-m-d\\TH:i' }}"
+                      class="block h-full w-full rounded-lg border border-dashed border-emerald-300 bg-white hover:bg-emerald-50 
+                              flex items-center justify-center text-[12px] font-medium text-emerald-700 transition">
+                      ➕ Livre · Agendar
+                    </a>
+
+                  </div>
+                {% endif %}
+              {% endif %}
+            </div>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
   </div>
 </div>
 {% endblock %}

@@ -1,0 +1,45 @@
+{% extends "painel/base_public.html" %}
+{% block title %}{{ shop.nome }} — Solicitar atendimento{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-lg p-6">
+  <h1 class="text-xl font-semibold mb-1">{{ shop.nome }}</h1>
+  {% if barber %}<div class="text-sm text-gray-600 mb-4">com {{ barber.user.get_full_name|default:barber.user.username }}</div>{% endif %}
+
+  {% if messages %}<ul class="mb-3">
+    {% for m in messages %}<li class="text-sm {% if m.tags == 'error' %}text-red-600{% else %}text-emerald-700{% endif %}">{{ m }}</li>{% endfor %}
+  </ul>{% endif %}
+
+  <form method="post" class="space-y-3">
+    {% csrf_token %}
+    <div>
+      <label class="block text-sm mb-1">Seu nome</label>
+      <input name="nome" class="w-full border rounded-xl px-3 py-2" placeholder="Opcional">
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Telefone (WhatsApp)</label>
+      <input name="telefone" class="w-full border rounded-xl px-3 py-2" placeholder="(DDD) 9 9999-9999" required>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Serviço</label>
+      <select name="servico_id" class="w-full border rounded-xl px-3 py-2" required>
+        <option value="">Selecione…</option>
+        {% for s in servicos %}
+          <option value="{{ s.id }}">{{ s.nome }} — {{ s.duracao_min }}min</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Horário desejado</label>
+      <input type="datetime-local" name="inicio" class="w-full border rounded-xl px-3 py-2">
+      <p class="text-xs text-gray-500 mt-1">Opcional — a barbearia confirmará o melhor horário.</p>
+    </div>
+    <div>
+      <label class="block text-sm mb-1">Observações</label>
+      <textarea name="observacoes" rows="3" class="w-full border rounded-xl px-3 py-2" placeholder="Ex.: corte com degradê, não posso depois das 18h"></textarea>
+    </div>
+    <button class="w-full rounded-xl bg-black text-white px-4 py-2">Enviar solicitação</button>
+  </form>
+
+  <p class="text-xs text-gray-500 mt-4">Não é necessário login para enviar a solicitação.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+<div class="card overflow-hidden">
+  <div class="flex items-center justify-between px-4 py-3 soft-divider">
+    <h3 class="section-title">Próximos horários</h3>
+    <a href="{% url 'agendamentos:agenda_dia' %}" class="text-sm text-blue-700 hover:underline">Abrir agenda</a>
+  </div>
+  <div class="divide-y">
+    {% for s in proximos %}
+      <div class="px-4 py-3 flex items-center justify-between">
+        <div class="min-w-0">
+          <div class="text-sm font-medium text-slate-900">
+            {{ s.inicio|date:"d/m H:i" }} · {{ s.nome|default:s.telefone }}
+          </div>
+          <div class="text-xs text-slate-600">
+            {% if s.servico %}{{ s.servico.nome|default:s.servico }}
+            {% elif s.servico_ref %}{{ s.servico_ref.nome }}
+            {% else %}Serviço{% endif %}
+          </div>
+        </div>
+        <span class="pill bg-emerald-100 text-emerald-700">{{ s.status|default:"CONFIRMADA" }}</span>
+      </div>
+    {% empty %}
+      <div class="px-4 py-8 text-center text-slate-500 text-sm">Sem próximos horários.</div>
+    {% endfor %}
+  </div>
+</div>

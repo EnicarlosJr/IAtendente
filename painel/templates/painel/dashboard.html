@@ -1,18 +1,14 @@
 {% extends "painel/base.html" %}
-{% load l10n %}
 {% block title %}Dashboard · IAtendente{% endblock %}
 {% block header %}Dashboard{% endblock %}
 
 {% block content %}
-
-<!-- LAYER de FUNDO (decorativo) -->
 <div class="relative">
-  <!-- blobs de cor -->
+  <!-- Fundo decorativo -->
   <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
     <div class="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-gradient-to-tr from-blue-200 to-emerald-200 opacity-30 blur-3xl"></div>
     <div class="absolute top-1/2 -right-40 h-96 w-96 rounded-full bg-gradient-to-tr from-fuchsia-200 to-indigo-200 opacity-25 blur-3xl"></div>
   </div>
-  <!-- grade sutil -->
   <svg aria-hidden="true" class="absolute inset-0 -z-10 h-full w-full opacity-10">
     <defs>
       <pattern id="gridPattern" width="32" height="32" patternUnits="userSpaceOnUse">
@@ -22,9 +18,9 @@
     <rect width="100%" height="100%" fill="url(#gridPattern)" class="text-slate-300"></rect>
   </svg>
 
-  <div class="mx-auto max-w-7xl px-4 py-6 space-y-6">
+  <div class="mx-auto max-w-7xl px-3 sm:px-4 py-6 space-y-6">
 
-    <!-- HEADER / STATUS BAR -->
+    <!-- HEADER -->
     <section class="card p-5 bg-gradient-to-r from-slate-50/80 to-white/80 backdrop-blur">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -34,292 +30,67 @@
               {{ dia|date:"d/m/Y" }} ({{ dia|date:"l"|capfirst }})
             </h1>
           {% endwith %}
-
-          {% if work_notes_today %}
-            <p class="mt-1 text-xs text-slate-600">{{ work_notes_today }}</p>
-          {% endif %}
-
           {% if proximos and proximos.0 %}
             <p class="mt-1 text-xs text-slate-500">
               Próximo: <strong>{{ proximos.0.inicio|date:"H:i" }}</strong>
               — {{ proximos.0.nome|default:proximos.0.telefone }}
               {% if proximos.0.servico %}
-                · {% if proximos.0.servico.nome %}{{ proximos.0.servico.nome }}{% else %}{{ proximos.0.servico }}{% endif %}
-              {% elif proximos.0.servico_ref %}
-                · {{ proximos.0.servico_ref.nome }}
+                · {{ proximos.0.servico.nome|default:proximos.0.servico }}
               {% endif %}
             </p>
           {% endif %}
         </div>
 
+        <!-- Status rápido -->
         <div class="flex flex-wrap items-center gap-2">
-          <span class="pill bg-slate-100 text-slate-700" title="Percentual do tempo de trabalho ocupado por atendimentos confirmados hoje">
-            🕘 Ocupação hoje: <strong>{{ kpis.utilizacao_hoje|default:0 }}%</strong>
-          </span>
-
-          <span class="pill bg-slate-100 text-slate-700" title="Janela operacional de hoje">
-            ⏱️ Janela: <strong>{{ workday_label|default:"08h–20h" }}</strong>
-          </span>
-
+          <span class="pill bg-slate-100 text-slate-700">🕘 {{ kpis.utilizacao_hoje|default:0 }}% ocupação</span>
+          <span class="pill bg-slate-100 text-slate-700">⏱️ {{ workday_label|default:"08h–20h" }}</span>
           {% if agenda_hoje %}
-            <span class="pill bg-slate-100 text-slate-700" title="Quantidade de solicitações confirmadas hoje">
-              📋 Agendamentos: <strong>{{ agenda_hoje|length }}</strong>
-            </span>
+            <span class="pill bg-slate-100 text-slate-700">📋 {{ agenda_hoje|length }} agendamentos</span>
           {% endif %}
-
           {% if solicitacoes_pendentes_count|default:0 > 0 %}
-            <a href="{% url 'painel:solicitacoes' %}"
-               class="pill bg-amber-100 text-amber-800 hover:bg-amber-200">
+            <a href="{% url 'painel:solicitacoes' %}" class="pill bg-amber-100 text-amber-800 hover:bg-amber-200">
               🔔 Pendências: <strong>{{ solicitacoes_pendentes_count }}</strong>
             </a>
           {% else %}
             <span class="pill bg-slate-100 text-slate-500">🔔 Pendências: 0</span>
           {% endif %}
-
-          <a href="{% url 'agendamentos:agenda_dia' %}" class="btn btn-primary ml-1">
-            📅 Abrir agenda
-          </a>
-
-          <a href="{% url 'agendamentos:minha_agenda_config' %}"
-             class="inline-flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-slate-100 border border-slate-200">
-            🗓️ Minha agenda
-          </a>
+          <a href="{% url 'agendamentos:agenda_dia' %}" class="btn btn-primary ml-1">📅 Abrir agenda</a>
+          <a href="{% url 'agendamentos:minha_agenda_config' %}" class="btn btn-outline">🗓️ Minha agenda</a>
         </div>
       </div>
     </section>
 
-    <!-- KPI RIBBON -->
+    <!-- KPIs -->
     <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-      <!-- Faturamento -->
-      <div class="card p-4">
-        <div class="flex items-center justify-between">
-          <div class="text-xs text-slate-500">Faturamento (mês)</div><div>💰</div>
-        </div>
-        <div class="kpi-val">R$ {{ kpis.faturamento_mes|default:'0'|floatformat:2|localize }}</div>
-        <div class="mt-1">
-          {% with pct=kpis_delta.fat_pct %}
-            {% if pct != None %}
-              <span class="pill {% if pct >= 0 %}bg-emerald-100 text-emerald-700{% else %}bg-rose-100 text-rose-700{% endif %}">
-                {% if pct >= 0 %}▲{% else %}▼{% endif %} {{ pct|floatformat:1 }}% vs mês ant.
-              </span>
-            {% endif %}
-          {% endwith %}
-        </div>
-        <div class="kpi-hint">Atendimentos concluídos (sem falta).</div>
-      </div>
-
-      <!-- Clientes novos -->
-      <div class="card p-4">
-        <div class="flex items-center justify-between">
-          <div class="text-xs text-slate-500">Clientes novos (mês)</div><div>🆕</div>
-        </div>
-        <div class="kpi-val">{{ kpis.clientes_novos_mes|default:0 }}</div>
-        <div class="mt-1">
-          {% with pct=kpis_delta.clientes_pct %}
-            {% if pct != None %}
-              <span class="pill {% if pct >= 0 %}bg-emerald-100 text-emerald-700{% else %}bg-rose-100 text-rose-700{% endif %}">
-                {% if pct >= 0 %}▲{% else %}▼{% endif %} {{ pct|floatformat:1 }}% vs mês ant.
-              </span>
-            {% endif %}
-          {% endwith %}
-        </div>
-        <div class="kpi-hint">Criados neste mês.</div>
-      </div>
-
-      <!-- Ocupação -->
-      <div class="card p-4">
-        <div class="flex items-center justify-between">
-          <div class="text-xs text-slate-500">Ocupação (hoje)</div>
-          <span class="pill bg-slate-100 text-slate-700">{{ workday_label|default:"08h–20h" }}</span>
-        </div>
-        <div class="kpi-val">{{ kpis.utilizacao_hoje|default:0 }}%</div>
-        {% with u=kpis.utilizacao_hoje|default:0 %}
-          <div class="mt-2 h-2 w-full rounded-full bg-slate-100" aria-hidden="true">
-            <div class="h-2 rounded-full {% if u < 50 %}bg-emerald-500{% elif u < 80 %}bg-amber-500{% else %}bg-rose-500{% endif %}" style="width: {{ u }}%"></div>
-          </div>
-          <div class="sr-only">Utilização hoje: {{ u }}%</div>
-        {% endwith %}
-        <div class="kpi-hint">Baseado na sua janela de trabalho configurada.</div>
-      </div>
-
-      <!-- Ticket médio -->
-      <div class="card p-4">
-        <div class="flex items-center justify-between">
-          <div class="text-xs text-slate-500">Ticket médio (mês)</div><div>🎟️</div>
-        </div>
-        <div class="kpi-val">R$ {{ kpis.ticket_medio|default:'0'|floatformat:2|localize }}</div>
-        <div class="mt-1">
-          {% with pct=kpis_delta.ticket_pct %}
-            {% if pct != None %}
-              <span class="pill {% if pct >= 0 %}bg-emerald-100 text-emerald-700{% else %}bg-rose-100 text-rose-700{% endif %}">
-                {% if pct >= 0 %}▲{% else %}▼{% endif %} {{ pct|floatformat:1 }}% vs mês ant.
-              </span>
-            {% endif %}
-          {% endwith %}
-        </div>
-        <div class="kpi-hint">Faturamento ÷ atendimentos.</div>
-      </div>
+      {% include "painel/partials/kpi.html" with label="Faturamento (mês)" icon="💰" val=kpis.faturamento_mes money=True delta=kpis_delta.fat_pct hint="Atendimentos concluídos (sem falta)." %}
+      {% include "painel/partials/kpi.html" with label="Clientes novos (mês)" icon="🆕" val=kpis.clientes_novos_mes delta=kpis_delta.clientes_pct hint="Criados neste mês." %}
+      {% include "painel/partials/kpi_occup.html" with u=kpis.utilizacao_hoje workday_label=workday_label %}
+      {% include "painel/partials/kpi.html" with label="Ticket médio (mês)" icon="🎟️" val=kpis.ticket_medio money=True delta=kpis_delta.ticket_pct hint="Faturamento ÷ atendimentos." %}
     </section>
 
-    <!-- 3 COLUNAS: ANÁLISES / SERVIÇOS / OPERAÇÕES -->
+    <!-- 3 COLUNAS -->
     <section class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
 
-      <!-- COLUNA 1: ANÁLISES -->
+      <!-- COLUNA 1 -->
       <div class="space-y-4">
-        <!-- Evolução do faturamento -->
-        <div class="card p-4">
-          <div class="flex items-center justify-between">
-            <h3 class="section-title">Evolução do faturamento (mês)</h3>
-            <span class="text-xs text-slate-500">Diário</span>
-          </div>
-          {% if chart_fat_values and chart_fat_values|length %}
-            <div class="mt-2 h-60"><canvas id="chartFat" class="!h-full !w-full"></canvas></div>
-          {% else %}
-            <div class="mt-6 h-60 flex items-center justify-center text-sm text-slate-500">Sem dados neste mês.</div>
-          {% endif %}
-        </div>
-
-        <!-- Horários de pico -->
-        <div class="card p-4">
-          <div class="flex items-center justify-between">
-            <h3 class="section-title">Horários de pico (últimos 30 dias)</h3>
-            <span class="text-xs text-slate-500">Solicitações confirmadas</span>
-          </div>
-          {% if chart_peak_values and chart_peak_values|length %}
-            <div class="mt-2 h-60"><canvas id="chartPeak" class="!h-full !w-full"></canvas></div>
-          {% else %}
-            <div class="mt-6 h-60 flex items-center justify-center text-sm text-slate-500">Sem dados recentes.</div>
-          {% endif %}
-        </div>
+        {% include "painel/partials/chart_card.html" with title="Evolução do faturamento (mês)" subtitle="Diário" chart_id="chartFat" has_data=chart_fat_values %}
+        {% include "painel/partials/chart_card.html" with title="Horários de pico (últimos 30 dias)" subtitle="Solicitações confirmadas" chart_id="chartPeak" has_data=chart_peak_values %}
       </div>
 
-      <!-- COLUNA 2: SERVIÇOS + RANKING -->
+      <!-- COLUNA 2 -->
       <div class="space-y-4">
-        <!-- Serviços mais executados -->
-        <div class="card p-4">
-          <div class="flex items-center justify-between">
-            <h3 class="section-title">Serviços mais executados (mês)</h3>
-            <span class="text-xs text-slate-500">Top 8</span>
-          </div>
-          {% if chart_srv_values and chart_srv_values|length %}
-            <div class="mt-2 h-60"><canvas id="chartSrv" class="!h-full !w-full"></canvas></div>
-          {% else %}
-            <div class="mt-6 h-60 flex items-center justify-center text-sm text-slate-500">Sem serviços registrados.</div>
-          {% endif %}
-        </div>
-
-        <!-- Ranking de clientes -->
-        <div class="card overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-3 soft-divider">
-            <h3 class="section-title">Ranking de clientes (mês)</h3>
-            <a href="{% url 'clientes:lista' %}" class="text-sm text-blue-700 hover:underline">Ver todos</a>
-          </div>
-          <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-              <thead class="bg-slate-50">
-                <tr class="text-left text-slate-600">
-                  <th class="px-4 py-2 font-medium">Cliente</th>
-                  <th class="px-4 py-2 font-medium">Atend.</th>
-                  <th class="px-4 py-2 font-medium text-right">Total (R$)</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-100">
-                {% for r in ranking_clientes %}
-                  <tr class="hover:bg-slate-50 transition">
-                    <td class="px-4 py-2 truncate">{{ r.nome|default:"(sem nome)" }}</td>
-                    <td class="px-4 py-2">{{ r.visitas }}</td>
-                    <td class="px-4 py-2 text-right">{{ r.total|default:'0'|floatformat:2|localize }}</td>
-                  </tr>
-                {% empty %}
-                  <tr><td class="px-4 py-6 text-center text-slate-500" colspan="3">Sem dados no mês.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {% include "painel/partials/chart_card.html" with title="Serviços mais executados (mês)" subtitle="Top 8" chart_id="chartSrv" has_data=chart_srv_values %}
+        {% include "painel/partials/ranking_clientes.html" %}
       </div>
 
-      <!-- COLUNA 3: OPERAÇÕES / QUALIDADE -->
+      <!-- COLUNA 3 -->
       <div class="space-y-4">
-        <!-- Próximos horários -->
-        <div class="card overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-3 soft-divider">
-            <h3 class="section-title">Próximos horários</h3>
-            <a href="{% url 'agendamentos:agenda_dia' %}" class="text-sm text-blue-700 hover:underline">Abrir agenda</a>
-          </div>
-          <div class="divide-y">
-            {% for s in proximos %}
-              <div class="px-4 py-3 flex items-center justify-between">
-                <div class="min-w-0">
-                  <div class="text-sm font-medium text-slate-900">
-                    {{ s.inicio|date:"d/m H:i" }} · {{ s.nome|default:s.telefone }}
-                  </div>
-                  <div class="text-xs text-slate-600">
-                    {% if s.servico %}
-                      {% if s.servico.nome %}{{ s.servico.nome }}{% else %}{{ s.servico }}{% endif %}
-                    {% elif s.servico_ref %}
-                      {{ s.servico_ref.nome }}
-                    {% else %}
-                      Serviço
-                    {% endif %}
-                  </div>
-                </div>
-                <span class="pill bg-emerald-100 text-emerald-700">
-                  {{ s.status|default:"CONFIRMADA" }}
-                </span>
-              </div>
-            {% empty %}
-              <div class="px-4 py-8 text-center text-slate-500 text-sm">Sem próximos horários.</div>
-            {% endfor %}
-          </div>
-        </div>
-
-        <!-- Funil (últimos 7 dias) -->
-        <div class="card p-4">
-          <div class="section-title mb-2">Funil (últimos 7 dias)</div>
-          <ul class="text-sm space-y-2">
-            <li>📥 Entradas: <span class="font-semibold">{{ funnel_7d.total|default:0 }}</span></li>
-            <li>✅ Confirmadas/realizadas: <span class="font-semibold">{{ funnel_7d.confirmadas|default:0 }}</span></li>
-            <li>⛔ No-show: <span class="font-semibold">{{ funnel_7d.noshow|default:0 }}</span></li>
-            <li>🎯 Conversão: <span class="font-semibold">{{ funnel_7d.conv_pct|default:0 }}%</span></li>
-          </ul>
-
-          {% with p=funnel_7d.conv_pct|default:0 %}
-          <div class="mt-3">
-            <div class="text-xs text-slate-500 mb-1">Progresso</div>
-            <div class="h-2 w-full rounded-full bg-slate-100">
-              <div
-                class="h-2 rounded-full {% if p >= 80 %}bg-emerald-500{% elif p >= 50 %}bg-amber-500{% else %}bg-blue-500{% endif %}"
-                style="width: {{ p }}%;"
-              ></div>
-            </div>
-          </div>
-          {% endwith %}
-        </div>
-
-        <!-- Qualidade do atendimento -->
-        <div class="card p-4">
-          <div class="section-title mb-2">Qualidade do atendimento</div>
-          <ul class="text-sm space-y-2">
-            <li>🔁 Retenção (30d): <span class="font-semibold">{{ retencao_30|default:0 }}%</span></li>
-            <li>⛔ No-show (30d): <span class="font-semibold">{{ noshow_rate_30|default:0 }}%</span>
-              <span class="text-slate-500">({{ noshow_30|default:0 }} faltas)</span></li>
-            <li>⏳ Intervalo médio entre cortes:
-              <span class="font-semibold">{% if intervalo_medio_dias %}{{ intervalo_medio_dias }} dias{% else %}—{% endif %}</span>
-            </li>
-          </ul>
-          <p class="mt-3 text-xs text-slate-500">Use estes indicadores para ajustar confirmações e lembretes.</p>
-        </div>
-
-        <!-- Alertas -->
-        <div class="card p-4">
-          <div class="section-title mb-2">Alertas</div>
-          <ul class="text-sm space-y-2">
-            <li>📅 Solicitações pendentes: <span class="font-semibold">{{ solicitacoes_pendentes_count|default:0 }}</span></li>
-          </ul>
-        </div>
+        {% include "painel/partials/proximos.html" %}
+        {% include "painel/partials/funil.html" %}
+        {% include "painel/partials/qualidade.html" %}
+        {% include "painel/partials/alertas.html" %}
       </div>
-
     </section>
   </div>
 </div>
@@ -327,42 +98,26 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
-  // Dados vindos da view
-  const fatLabels = {{ chart_fat_labels|default:"[]"|safe }};
-  const fatValues = {{ chart_fat_values|default:"[]"|safe }};
-  const peakLabels = {{ chart_peak_labels|default:"[]"|safe }};
-  const peakValues = {{ chart_peak_values|default:"[]"|safe }};
-  const srvLabels = {{ chart_srv_labels|default:"[]"|safe }};
-  const srvValues = {{ chart_srv_values|default:"[]"|safe }};
-
   const money = (v)=>`R$ ${Number(v ?? 0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})}`;
 
-  const elFat=document.getElementById('chartFat');
-  if(elFat){
-    new Chart(elFat,{type:'line',
-      data:{labels:fatLabels,datasets:[{data:fatValues,tension:.35,pointRadius:2}]},
-      options:{
-        plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>money(ctx.parsed.y)}}},
-        scales:{y:{beginAtZero:true,ticks:{callback:(v)=>`R$ ${v}`}},x:{grid:{display:false}}}
-      }
-    });
-  }
+  const charts = [
+    {id:'chartFat', type:'line', labels:{{ chart_fat_labels|default:"[]"|safe }}, values:{{ chart_fat_values|default:"[]"|safe }},
+      opts:{plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>money(ctx.parsed.y)}}},scales:{y:{beginAtZero:true},x:{grid:{display:false}}}}},
+    {id:'chartPeak', type:'line', labels:{{ chart_peak_labels|default:"[]"|safe }}, values:{{ chart_peak_values|default:"[]"|safe }},
+      opts:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true},x:{grid:{display:false}}}}},
+    {id:'chartSrv', type:'bar', labels:{{ chart_srv_labels|default:"[]"|safe }}, values:{{ chart_srv_values|default:"[]"|safe }},
+      opts:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true},y:{ticks:{autoSkip:false}}}}}
+  ];
 
-  const elPeak=document.getElementById('chartPeak');
-  if(elPeak){
-    new Chart(elPeak,{type:'line',
-      data:{labels:peakLabels,datasets:[{data:peakValues,tension:.35,pointRadius:2}]},
-      options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true},x:{grid:{display:false}}}}
-    });
-  }
-
-  const elSrv=document.getElementById('chartSrv');
-  if(elSrv){
-    new Chart(elSrv,{type:'bar',
-      data:{labels:srvLabels,datasets:[{data:srvValues,borderWidth:1}]},
-      options:{indexAxis:'y',plugins:{legend:{display:false}},
-               scales:{x:{beginAtZero:true},y:{ticks:{autoSkip:false,maxRotation:0,minRotation:0}}}}
-    });
-  }
+  charts.forEach(c=>{
+    const el=document.getElementById(c.id);
+    if(el){
+      new Chart(el,{
+        type:c.type,
+        data:{labels:c.labels,datasets:[{data:c.values,tension:.35,pointRadius:2,borderWidth:1}]},
+        options:c.opts
+      });
+    }
+  });
 </script>
 {% endblock %}

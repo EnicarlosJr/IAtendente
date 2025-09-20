@@ -1,0 +1,19 @@
+{% extends "painel/base.html" %}
+{% block title %}Entrar{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-md p-6 bg-white rounded-xl border">
+  <h1 class="text-lg font-semibold mb-4">Entrar</h1>
+  <form method="post">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="block text-sm mb-1">Usuário</label>
+      <input type="text" name="username" class="w-full border rounded px-3 py-2" required>
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm mb-1">Senha</label>
+      <input type="password" name="password" class="w-full border rounded px-3 py-2" required>
+    </div>
+    <button class="w-full bg-black text-white rounded px-4 py-2">Entrar</button>
+  </form>
+</div>
+{% endblock %}

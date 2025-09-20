@@ -3,12 +3,16 @@ from django.contrib import admin
 from django.urls import include, path
 from django.conf import settings
 from django.conf.urls.static import static
+from painel import views as painel_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 
     # Páginas web
-    path("", include(("painel.urls", "painel"), namespace="painel")),
+    path("barbearias/", include("barbearias.urls", namespace="public")),  # rotas /b/<shop>/...
+    path("accounts/", include("django.contrib.auth.urls")),  # /accounts/login/, /accounts/logout/, etc.
+    path("", painel_views.home, name="home"),
+    path("painel/", include(("painel.urls", "painel"), namespace="painel")),
     path("solicitacoes/", include(("solicitacoes.urls", "solicitacoes"), namespace="solicitacoes")),
     path("clientes/", include(("clientes.urls", "clientes"), namespace="clientes")),
     path("agendamentos/", include(("agendamentos.urls", "agendamentos"), namespace="agendamentos")),
@@ -24,3 +28,5 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=getattr(settings, "STATIC_ROOT", None))
     urlpatterns += static(settings.MEDIA_URL, document_root=getattr(settings, "MEDIA_ROOT", None))
+
+    

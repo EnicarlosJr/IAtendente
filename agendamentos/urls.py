@@ -10,5 +10,6 @@ urlpatterns = [
     path("mes/", views.agenda_mes, name="agenda_mes"),
     path("minha-agenda/", views.minha_agenda_config, name="minha_agenda_config"),
     path("novo/<int:solicitacao_id>/", views.agendamento_novo, name="agendamento_novo_para_solicitacao"),
+    path("novo/", views.agendamento_novo, name="agendamento_novo"),
 
 ]

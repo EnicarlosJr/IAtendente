@@ -1,0 +1,12 @@
+{% extends "painel/base.html" %}
+{% block title %}Criar barbearia{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-md p-6 bg-white rounded-xl border">
+  <h1 class="text-lg font-semibold mb-4">Criar barbearia</h1>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="w-full bg-black text-white rounded px-4 py-2">Criar</button>
+  </form>
+</div>
+{% endblock %}

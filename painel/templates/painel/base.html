@@ -1,23 +1,35 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" class="h-full">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0ea5e9" />
   <title>{% block title %}IAtendente{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'build/tailwind.css' %}">
-</head>
-<body class="min-h-screen text-slate-900 bg-gradient-to-b from-slate-50 to-slate-100">
 
-  <!-- Drawer mobile -->
+  <link rel="stylesheet" href="{% static 'build/tailwind.css' %}">
+  {% block head_extra %}{% endblock %}
+</head>
+
+<body class="min-h-full bg-gradient-to-b from-slate-50 to-slate-100 text-slate-900">
+
+  <!-- Toggle do drawer mobile -->
   <input id="sidebar-toggle" type="checkbox" class="peer hidden" />
 
   <div class="min-h-screen flex">
+
     <!-- SIDEBAR -->
-    <aside class="fixed lg:static inset-y-0 left-0 z-40 w-64
-                  -translate-x-full peer-checked:translate-x-0 lg:translate-x-0
-                  transition-transform duration-200 bg-white border-r border-gray-200 shadow-sm">
-      {% include "painel/_sidebar.html" %}
+    <aside
+      class="fixed lg:static inset-y-0 left-0 z-40 w-72
+             -translate-x-full peer-checked:translate-x-0 lg:translate-x-0
+             transition-transform duration-200 bg-white border-r border-gray-200 shadow-sm
+             flex flex-col">
+      <div class="flex-1 overflow-y-auto">
+        {% include "painel/_sidebar.html" %}
+      </div>
+      <div class="px-4 py-3 border-t text-xs text-slate-500">
+        © {{ now|default:None|date:"Y" }} IAtendente
+      </div>
     </aside>
 
     <!-- OVERLAY (mobile) -->
@@ -26,30 +38,133 @@
 
     <!-- CONTEÚDO -->
     <main class="flex-1 min-w-0 flex flex-col">
-      <!-- TOPBAR (sólida p/ máximo contraste) -->
-      <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4">
+
+      <!-- TOPBAR -->
+      <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-4">
         <div class="flex items-center gap-2">
+          <!-- Botão do drawer (mobile) -->
           <label for="sidebar-toggle"
-                 class="lg:hidden inline-flex items-center justify-center size-9 rounded-md border border-gray-200 bg-white hover:bg-gray-50">
-            <svg class="w-5 h-5 text-gray-700" viewBox="0 0 20 20" fill="currentColor">
+                 class="lg:hidden inline-flex items-center justify-center size-9 rounded-md border border-gray-200 bg-white hover:bg-gray-50"
+                 aria-label="Abrir menu">
+            <svg class="w-5 h-5 text-gray-700" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path fill-rule="evenodd" d="M3 5h14v2H3V5zm0 4h14v2H3V9zm0 4h14v2H3v-2z" clip-rule="evenodd"/>
             </svg>
           </label>
-          <h1 class="font-semibold text-slate-800">{% block header %}{{ title|default:"" }}{% endblock %}</h1>
+
+          <h1 class="font-semibold text-slate-800 truncate">
+            {% block header %}{{ title|default:"" }}{% endblock %}
+          </h1>
         </div>
-        <div class="hidden md:block w-72">
-          <input type="text" placeholder="Buscar..."
-                 class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm
-                        text-slate-900 placeholder:text-slate-400
-                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-        </div>
+
+        <!-- Perfil / Avatar na Topbar -->
+        {% if request.user.is_authenticated %}
+          <details class="relative group">
+            <summary class="flex items-center gap-2 cursor-pointer list-none">
+              <div class="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-sm font-bold text-blue-700">
+                {{ request.user.first_name|slice:":1"|default:"U" }}
+              </div>
+              <span class="hidden sm:inline text-sm font-medium text-slate-700">
+                {{ request.user.get_full_name|default:request.user.username }}
+              </span>
+            </summary>
+            <div class="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-md z-50 text-sm">
+              <div class="px-3 py-2 border-b border-gray-100">
+                <div class="font-medium truncate">{{ request.user.get_full_name|default:request.user.username }}</div>
+                <div class="text-xs text-gray-500 truncate">{{ request.user.email|default:"" }}</div>
+              </div>
+              <a href="{% url 'password_change' %}" class="block px-3 py-2 hover:bg-slate-50">Alterar senha</a>
+              <a href="{% url 'logout' %}" class="block px-3 py-2 text-red-600 hover:bg-red-50">Sair</a>
+            </div>
+          </details>
+        {% else %}
+          <a href="{% url 'login' %}" class="px-3 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700">
+            Entrar
+          </a>
+        {% endif %}
       </header>
 
-      <!-- PAGE -->
-      <div class="p-6 max-w-7xl w-full mx-auto">
+      <!-- MENSAGENS DJANGO -->
+      {% if messages %}
+        <div class="px-3 sm:px-4 pt-3">
+          <div class="space-y-2">
+            {% for m in messages %}
+              {% with lvl=m.tags|default:'info' %}
+                <div role="alert" 
+                     class="rounded-lg px-3 py-2 text-sm
+                            {% if 'success' in lvl %}bg-emerald-50 text-emerald-800 border border-emerald-200
+                            {% elif 'error' in lvl %}  bg-rose-50 text-rose-800 border border-rose-200
+                            {% elif 'warning' in lvl %}bg-amber-50 text-amber-800 border border-amber-200
+                            {% else %}                 bg-slate-50 text-slate-800 border border-slate-200{% endif %}">
+                  {{ m }}
+                </div>
+              {% endwith %}
+            {% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      <!-- CONTEÚDO DA PÁGINA -->
+      <div class="p-4 sm:p-6 max-w-7xl w-full mx-auto">
         {% block content %}{% endblock %}
       </div>
+
+      <!-- Bottom nav (mobile) -->
+      {% with rm=request.resolver_match ns=rm.namespace|default:'' url_name=rm.url_name|default:'' %}
+      <nav class="lg:hidden sticky bottom-0 z-20 bg-white border-t border-gray-200">
+        <ul class="grid grid-cols-4 text-xs">
+          <li>
+            <a href="{% url 'painel:dashboard' %}"
+               class="flex flex-col items-center py-2 {% if ns == 'painel' and url_name == 'dashboard' %}text-blue-600{% else %}text-slate-600{% endif %}">
+              <span>🏠</span><span>Home</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'agendamentos:agenda_dia' %}"
+               class="flex flex-col items-center py-2 {% if ns == 'agendamentos' %}text-blue-600{% else %}text-slate-600{% endif %}">
+              <span>📅</span><span>Agenda</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'painel:solicitacoes' %}"
+               class="flex flex-col items-center py-2 {% if ns == 'painel' and url_name == 'solicitacoes' %}text-blue-600{% else %}text-slate-600{% endif %}">
+              <span>📝</span><span>Solicitações</span>
+            </a>
+          </li>
+          <li>
+            <a href="{% url 'servicos:lista' %}"
+               class="flex flex-col items-center py-2 {% if ns == 'servicos' %}text-blue-600{% else %}text-slate-600{% endif %}">
+              <span>✂️</span><span>Serviços</span>
+            </a>
+          </li>
+        </ul>
+      </nav>
+      {% endwith %}
     </main>
   </div>
+
+  <!-- Scripts -->
+  <script>
+    // Fecha o drawer ao clicar em qualquer link dentro do sidebar (no mobile)
+    (function(){
+      const cb = document.getElementById('sidebar-toggle');
+      const aside = document.querySelector('aside');
+      if (!cb || !aside) return;
+      aside.addEventListener('click', (e)=>{
+        const a = e.target.closest('a');
+        if (a && window.getComputedStyle(document.querySelector('label[for="sidebar-toggle"]')).display !== 'none') {
+          cb.checked = false;
+        }
+      });
+    })();
+
+    // Auto-esconde apenas mensagens (não os cards da agenda!)
+    setTimeout(()=>{
+      document.querySelectorAll('[role="alert"]').forEach(el=>{
+        el.classList.add('opacity-0','transition','duration-500');
+        setTimeout(()=>el.remove(), 1000); // remove do DOM após animar
+      });
+    }, 3000);
+  </script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

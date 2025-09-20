@@ -11,9 +11,10 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+STATICFILES_DIRS = [
+    BASE_DIR / "static",
+]
 
 
 # Quick-start development settings - unsuitable for production
@@ -26,6 +27,10 @@ SECRET_KEY = 'django-insecure-ckpouez&q)axim(k@e6vumf7+dh@nr-3x_+o^sgvc@sxk)&vo(
 DEBUG = True
 
 ALLOWED_HOSTS = []
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "painel:dashboard"
+LOGOUT_REDIRECT_URL = "login"
 
 
 # Application definition
@@ -45,6 +50,7 @@ INSTALLED_APPS = [
     'painel',
     'agendamentos',
     'servicos',
+    'barbearias',
 ]
 
 MIDDLEWARE = [
@@ -123,14 +129,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 # já vem por padrão
-STATIC_URL = "static/"
-
-# se você tem uma pasta "static" no raiz do projeto
-from pathlib import Path
-BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_URL = 'static/'
 STATICFILES_DIRS = [
-    BASE_DIR / "static",
+    BASE_DIR / 'painel' / 'static',  # garante que Django ache /painel/static
 ]
+# se você tem uma pasta "static" no raiz do projeto
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
