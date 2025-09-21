@@ -1,22 +1,4 @@
 services:
-  web:
-    build: .
-    container_name: django_app
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn IAtendente.wsgi:application --bind 0.0.0.0:8000"
-    volumes:
-      - .:/code
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    depends_on:
-      - db
-    networks:
-      - evolution-net
-
   db:
     image: postgres:15
     container_name: django_db
@@ -27,6 +9,40 @@ services:
       POSTGRES_PASSWORD: secret
     volumes:
       - django_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1 -p 5432"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - evolution-net
+
+  web:
+    user: "0:0"
+    build: .
+    container_name: django_web
+    # Se o setup.sh do HOST sobrescrever o da imagem via volume, ele pode perder o +x.
+    # Estas duas linhas garantem execução mesmo assim:
+    entrypoint: ["/bin/sh", "/app/setup.sh"]
+    command: ["/bin/sh","/app/setup.sh","gunicorn","core.wsgi:application","--bind","0.0.0.0:8000"]
+    depends_on:
+      db:
+        condition: service_healthy
+    # ⚠️ durante a depuração, REMOVA o volume para não mascarar o setup.sh da imagem
+    # volumes:
+    #   - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SETTINGS_MODULE: core.settings
+      POSTGRES_DB: django_db
+      POSTGRES_USER: django
+      POSTGRES_PASSWORD: secret
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DJANGO_SUPERUSER_USERNAME: admin
+      DJANGO_SUPERUSER_EMAIL: admin@example.com
+      DJANGO_SUPERUSER_PASSWORD: admin123
     networks:
       - evolution-net
 

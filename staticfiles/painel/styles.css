@@ -1,0 +1,85 @@
+/* ---------- Layout refinado ---------- */
+
+/* A coluna da sidebar pode ficar um pouco maior no desktop */
+.layout{
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 280px 1fr;   /* antes: 260px */
+}
+@media (max-width: 1024px){
+  .layout{ grid-template-columns: 1fr; }
+}
+
+/* Topbar colada no topo com leve blur (melhora percepção de hierarquia) */
+.topbar{
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  height: 56px;
+  backdrop-filter: saturate(140%) blur(6px);
+  background: rgba(255,255,255,0.85);
+  border-bottom: 1px solid var(--panel-border);
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 0 16px;
+}
+@supports not (backdrop-filter: blur(6px)) {
+  .topbar { background: var(--panel); }
+}
+
+/* Limitar largura e centralizar o conteúdo (acaba com “vazio infinito”) */
+.page{
+  padding: 16px;
+  max-width: 1200px;     /* novo */
+  margin-inline: auto;   /* novo */
+}
+
+/* Cards com menos “ar” entre si */
+.grid{ display: grid; gap: 16px; }
+.grid--2{ grid-template-columns: repeat(2, 1fr); }
+.grid--3{ grid-template-columns: repeat(3, 1fr); }
+.grid--4{ grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 1280px){ .grid--4{ grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 640px){  .grid--4, .grid--3, .grid--2{ grid-template-columns: 1fr; } }
+
+/* Polimento da sidebar */
+.sidebar{ background: var(--panel); border-right: 1px solid var(--panel-border); }
+.sidebar__brand{ padding: 18px 16px; border-bottom: 1px solid var(--panel-border); }
+.sidebar__brand-title{ font-weight: 700; font-size: 18px; }
+.sidebar__brand-sub{ font-size: 12px; color: var(--muted); }
+
+.nav{ padding: 8px; display: grid; gap: 4px; }
+.nav__link{
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-xs);
+  color: var(--text); text-decoration: none;
+}
+.nav__link:hover{ background: #f1f5f9; }
+.nav__link--active{
+  background: var(--brand); color: var(--brand-contrast);
+  box-shadow: var(--shadow-sm);
+}
+.nav__icon{ width: 18px; text-align: center; }
+
+/* Badge de pendências alinhada à direita no link */
+.nav__link .badge{ margin-left: auto; }
+
+/* Tipografia dentro dos cards: menos margem extra */
+.card__title{ font-weight: 600; margin-bottom: 6px; }
+.card__muted{ color: var(--muted); font-size: 13px; }
+
+/* Barras de progresso mais “firmes” */
+.progress{ width: 100%; height: 8px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+.progress__bar{ height: 100%; background: #10b981; } /* emerald-500 */
+
+/* Tabela: cabeçalho mais discreto, células compactas */
+.table th, .table td{ padding: 10px 12px; }
+.table th{ background:#fafafa; color: var(--muted); font-size: 12px; }
+
+/* Campos: reduzi bordas fortes */
+.input{
+  width: 100%; background: #fff;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px; padding: 10px 12px; font-size: 14px;
+}
+.input::placeholder{ color:#94a3b8; }
+
