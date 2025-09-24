@@ -1,21 +1,12 @@
-# --- Core Django ---
-Django==5.2.6
 asgiref==3.9.1
-sqlparse==0.5.3
-
-# --- Banco de Dados ---
-psycopg2-binary==2.9.10   # Driver PostgreSQL
-
-# --- API / REST ---
-djangorestframework==3.16.1
-
-# --- Templates / Forms ---
+certifi==2025.8.3
+charset-normalizer==3.4.3
+Django==5.2.6
 django-widget-tweaks==1.5.0
-
-# --- Utilitários ---
-python-decouple==3.8      # Ler variáveis do .env
-gunicorn==22.0.0          # Servidor WSGI para produção
-
-# --- Segurança / Deploy (opcionais, mas recomendados) ---
-whitenoise==6.7.0         # Servir arquivos estáticos no deploy
-django-cors-headers==4.3.1  # Se precisar habilitar API externa / frontend
+djangorestframework==3.16.1
+idna==3.10
+psycopg2-binary==2.9.10
+python-dotenv==1.1.1
+requests==2.32.5
+sqlparse==0.5.3
+urllib3==2.5.0
