@@ -1,11 +1,32 @@
 {% with rm=request.resolver_match|default:'' ns=rm.namespace|default:'' url_name=rm.url_name|default:'' q=request.GET.urlencode pending=solicitacoes_pendentes_count|default:0 %}
 
+
+  {% if shop %}
+  <div class="px-3 py-1 text-xs text-green-700 bg-green-100 rounded">
+    Shop ativo: {{ shop.slug }}
+  </div>
+{% else %}
+  <div class="px-3 py-1 text-xs text-red-700 bg-red-100 rounded">
+    Nenhuma barbearia encontrada.
+  </div>
+{% endif %}
+
+
+
+
+
+
   <!-- BRAND -->
   <div class="px-4 py-4 border-b border-gray-200 bg-slate-50">
-    <a href="{% url 'painel:dashboard' %}" class="block">
-      <div class="text-lg font-bold text-slate-800">IAtendente</div>
-      <div class="text-xs text-gray-500">Painel Administrativo</div>
-    </a>
+    {% if request.user.is_authenticated %}
+      <a href="{% url 'painel:dashboard' %}" class="block">
+        <div class="text-lg font-bold text-slate-800">IAtendente</div>
+        <div class="text-xs text-gray-500">Painel Administrativo</div>
+      </a>
+    {% else %}
+      <div class="text-lg font-bold text-slate-400">IAtendente</div>
+      <div class="text-xs text-gray-400">Painel Administrativo</div>
+    {% endif %}
   </div>
 
   <!-- NAV -->
@@ -13,15 +34,19 @@
     <div class="px-2 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Navegação</div>
 
     <!-- Dashboard -->
-    <a href="{% url 'painel:dashboard' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-              {% if ns == 'painel' and url_name == 'dashboard' %}
-                bg-blue-600 text-white shadow-sm
-              {% else %}
-                text-slate-700 hover:bg-slate-50
-              {% endif %}">
-      <span>🏠</span><span>Dashboard</span>
-    </a>
+    {% if request.user.is_authenticated %}
+      <a href="{% url 'painel:dashboard' %}"
+         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'painel' and url_name == 'dashboard' %}
+                  bg-blue-600 text-white shadow-sm
+                {% else %}
+                  text-slate-700 hover:bg-slate-50
+                {% endif %}">
+        <span>🏠</span><span>Dashboard</span>
+      </a>
+    {% else %}
+      <span class="block px-3 py-2 text-slate-400">Dashboard indisponível</span>
+    {% endif %}
 
     <!-- Agenda -->
     <details class="group" {% if ns == 'agendamentos' %}open{% endif %}>
@@ -35,66 +60,82 @@
         <span class="transition-transform group-open:rotate-180 opacity-70">▾</span>
       </summary>
       <div class="mt-1 ml-6 space-y-1">
-        <a href="{% url 'agendamentos:agenda_dia' %}?view=dia"
-           class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_dia' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
-          Dia
-        </a>
-        <a href="{% url 'agendamentos:agenda_semana' %}?view=semana"
-           class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_semana' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
-          Semana
-        </a>
-        <a href="{% url 'agendamentos:agenda_mes' %}?view=mes"
-           class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_mes' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
-          Mês
-        </a>
+        {% if shop %}
+          <a href="{% url 'agendamentos:agenda_dia' shop.slug %}?view=dia"
+             class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_dia' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
+            Dia
+          </a>
+          <a href="{% url 'agendamentos:agenda_semana' shop.slug %}?view=semana"
+             class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_semana' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
+            Semana
+          </a>
+          <a href="{% url 'agendamentos:agenda_mes' shop.slug %}?view=mes"
+             class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_mes' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
+            Mês
+          </a>
+        {% else %}
+          <span class="block px-3 py-2 text-slate-400">Agenda indisponível</span>
+        {% endif %}
       </div>
     </details>
 
     <!-- Solicitações -->
-    <a href="{% url 'painel:solicitacoes' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-              {% if ns == 'painel' and url_name == 'solicitacoes' %}
-                bg-blue-600 text-white shadow-sm
-              {% else %}
-                text-slate-700 hover:bg-slate-50
-              {% endif %}">
-      <span>📝</span>
-      <span class="flex-1">Solicitações</span>
-      <span class="ml-auto inline-flex items-center rounded-full text-[11px] px-2 py-0.5
-                   {% if pending|default:0 > 0 %}
-                     bg-amber-100 text-amber-700
-                   {% else %}
-                     bg-slate-100 text-slate-600
-                   {% endif %}">
-        {{ pending|default:0 }}
-      </span>
-    </a>
+    {% if request.user.is_authenticated %}
+      <a href="{% url 'painel:solicitacoes' %}"
+         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'painel' and url_name == 'solicitacoes' %}
+                  bg-blue-600 text-white shadow-sm
+                {% else %}
+                  text-slate-700 hover:bg-slate-50
+                {% endif %}">
+        <span>📝</span>
+        <span class="flex-1">Solicitações</span>
+        <span class="ml-auto inline-flex items-center rounded-full text-[11px] px-2 py-0.5
+                     {% if pending|default:0 > 0 %}
+                       bg-amber-100 text-amber-700
+                     {% else %}
+                       bg-slate-100 text-slate-600
+                     {% endif %}">
+          {{ pending|default:0 }}
+        </span>
+      </a>
+    {% else %}
+      <span class="block px-3 py-2 text-slate-400">Solicitações indisponível</span>
+    {% endif %}
 
     <!-- Serviços -->
-    <a href="{% url 'servicos:lista' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-              {% if ns == 'servicos' %}
-                bg-blue-600 text-white shadow-sm
-              {% else %}
-                text-slate-700 hover:bg-slate-50
-              {% endif %}">
-      <span>✂️</span><span>Serviços</span>
-    </a>
+    {% if request.user.is_authenticated and shop %}
+      <a href="{% url 'servicos:lista' shop.slug %}"
+         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'servicos' %}
+                  bg-blue-600 text-white shadow-sm
+                {% else %}
+                  text-slate-700 hover:bg-slate-50
+                {% endif %}">
+        <span>✂️</span><span>Serviços</span>
+      </a>
+    {% else %}
+      <span class="block px-3 py-2 text-slate-400">Serviços indisponível</span>
+    {% endif %}
 
     <!-- Clientes -->
-    <a href="{% url 'clientes:lista' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-              {% if ns == 'clientes' %}
-                bg-blue-600 text-white shadow-sm
-              {% else %}
-                text-slate-700 hover:bg-slate-50
-              {% endif %}">
-      <span>👤</span><span>Clientes</span>
-    </a>
+    {% if request.user.is_authenticated and shop %}
+      <a href="{% url 'clientes:lista' shop.slug %}"
+         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'clientes' %}
+                  bg-blue-600 text-white shadow-sm
+                {% else %}
+                  text-slate-700 hover:bg-slate-50
+                {% endif %}">
+        <span>👤</span><span>Clientes</span>
+      </a>
+    {% else %}
+      <span class="block px-3 py-2 text-slate-400">Clientes indisponível</span>
+    {% endif %}
 
     <!-- Usuários (somente se gerente/dono) -->
-    {% if is_manager %}
-      <a href="{% url 'barbearias:usuarios' %}"
+    {% if is_manager and shop %}
+      <a href="{% url 'barbearias:usuarios' shop.slug %}"
          class="flex items-center gap-2 px-3 py-2 rounded-lg transition
                 {% if ns == 'barbearias' and url_name == 'usuarios' %}
                   bg-blue-600 text-white shadow-sm
@@ -103,18 +144,31 @@
                 {% endif %}">
         <span>👥</span><span>Usuários</span>
       </a>
+    {% else %}
+      {% if request.user.is_authenticated %}
+        <span class="block px-3 py-2 text-slate-400">Usuários indisponível</span>
+      {% endif %}
     {% endif %}
 
     <!-- Atalhos -->
     <div class="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Atalhos</div>
-    <a href="{% url 'agendamentos:agenda_dia' %}?new=1"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
-      <span>➕</span><span>Novo horário</span>
-    </a>
-    <a href="{% url 'clientes:novo' %}"
-       class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
-      <span>👥</span><span>Novo cliente</span>
-    </a>
+    {% if shop %}
+      <a href="{% url 'agendamentos:agenda_dia' shop.slug %}?new=1"
+         class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
+        <span>➕</span><span>Novo horário</span>
+      </a>
+    {% else %}
+      <span class="block px-3 py-2 text-slate-400">Novo horário indisponível</span>
+    {% endif %}
+
+    {% if request.user.is_authenticated and shop %}
+      <a href="{% url 'clientes:novo' shop.slug %}"
+         class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
+        <span>👥</span><span>Novo cliente</span>
+      </a>
+    {% else %}
+      <span class="block px-3 py-2 text-slate-400">Novo cliente indisponível</span>
+    {% endif %}
   </nav>
 
 {% endwith %}

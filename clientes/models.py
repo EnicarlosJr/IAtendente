@@ -8,6 +8,7 @@ class Cliente(models.Model):
         ATIVO = "ATIVO", "Ativo"
         INATIVO = "INATIVO", "Inativo"
 
+    shop = models.ForeignKey("barbearias.BarberShop", on_delete=models.CASCADE, related_name="clientes")
     nome = models.CharField(max_length=120)
     telefone = models.CharField(max_length=20, unique=True, null=True, blank=True)
     preferencias = models.TextField(null=True, blank=True)

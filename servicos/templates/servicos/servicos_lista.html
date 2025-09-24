@@ -33,7 +33,7 @@
       </div>
 
       <div class="flex gap-2">
-        <a href="{% url 'servicos:novo' %}"
+        <a href="{% url 'servicos:novo' shop.slug %}"
            class="rounded-xl px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-700">Novo serviço</a>
       </div>
     </form>
@@ -55,7 +55,7 @@
         {% for s in servicos %}
           <tr id="row-{{ s.id }}" class="hover:bg-gray-50">
             <td class="px-4 py-3">
-              <a href="{% url 'servicos:detalhe' s.id %}" class="font-medium text-gray-900 hover:underline">
+              <a href="{% url 'servicos:detalhe' shop.slug s.id %}" class="font-medium text-gray-900 hover:underline">
                 {{ s.nome }}
               </a>
             </td>
@@ -70,7 +70,7 @@
             </td>
             <td class="px-4 py-3">
               <div class="flex justify-end gap-2">
-                <a href="{% url 'servicos:editar' s.id %}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Editar</a>
+                <a href="{% url 'servicos:editar' shop.slug s.id %}" class="rounded-xl border px-3 py-1.5 hover:bg-gray-50">Editar</a>
                 <button type="button" class="rounded-xl px-3 py-1.5
                         {% if s.ativo %} bg-amber-600 text-white hover:bg-amber-700 {% else %} border hover:bg-gray-50 {% endif %}"
                         onclick="toggleAtivo({{ s.id }})">
@@ -118,7 +118,7 @@
     return el ? el.value : '';
   }
   async function toggleAtivo(id) {
-    const url = "{% url 'servicos:toggle_ativo' 0 %}".replace('/0/', `/${id}/`);
+    const url = "{% url 'servicos:toggle_ativo' shop.slug 0 %}".replace('/0/', `/${id}/`);
     const res = await fetch(url, {
       method: 'POST',
       headers: {'X-CSRFToken': getCSRFCookie(), 'X-Requested-With': 'XMLHttpRequest'}

@@ -5,5 +5,5 @@ from .api_views import SolicitacaoIntakeView
 app_name = "api_solicitacoes"
 
 urlpatterns = [
-    path("intake/", SolicitacaoIntakeView.as_view(), name="intake"),
+    path("intake/", SolicitacaoIntakeView.as_view(), name="solicitacao-intake"),
 ]

@@ -10,9 +10,6 @@ def _norm_tel(s: str) -> str:
     digits = re.sub(r"\D+", "", s)
     return digits
 
-# clientes/forms.py
-from django import forms
-from .models import Cliente
 
 class ClienteForm(forms.ModelForm):
     class Meta:

@@ -1,0 +1,10 @@
+services:
+  web:
+    # Comentário: em dev, rode como appuser (padrão do Dockerfile) ou root se preferir
+    # user: "0:0"
+    volumes:
+      - .:/app
+    command: ["python","manage.py","runserver","0.0.0.0:8000"]
+    environment:
+      DJANGO_SETTINGS_MODULE: core.settings
+      DEBUG: "1"

@@ -7,14 +7,17 @@
   <form method="post" class="bg-white rounded-xl border p-4 space-y-3">
     {% csrf_token %}
     {{ form.non_field_errors }}
+
     <div>{{ form.nome.label_tag }} {{ form.nome }}</div>
     <div>{{ form.categoria.label_tag }} {{ form.categoria }}</div>
     <div>{{ form.duracao_min.label_tag }} {{ form.duracao_min }}</div>
     <div>{{ form.preco.label_tag }} {{ form.preco }}</div>
     <div>{{ form.descricao.label_tag }} {{ form.descricao }}</div>
     <div class="flex items-center gap-2">{{ form.ativo }} {{ form.ativo.label_tag }}</div>
+
     <div class="pt-2 flex gap-2">
-      <a href="{% url 'servicos:lista' %}" class="px-4 py-2 rounded-xl border">Cancelar</a>
+      <a href="{% url 'servicos:lista' shop.slug %}" 
+         class="px-4 py-2 rounded-xl border">Cancelar</a>
       <button class="px-4 py-2 rounded-xl bg-black text-white">Salvar</button>
     </div>
   </form>

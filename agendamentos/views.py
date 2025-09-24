@@ -1,35 +1,35 @@
 # agendamentos/views.py
+
 from collections import OrderedDict
 from datetime import date, datetime, time, timedelta
 from calendar import monthrange
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import get_user_model
 from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404, render, redirect
 from django.utils import timezone
 
-from servicos.forms import AgendamentoForm
-from solicitacoes.models import Solicitacao, SolicitacaoStatus
-from agendamentos.models import Agendamento, BarberAvailability
+from agendamentos.forms import (
+    BarbeiroAvailabilityForm,
+    BarbeiroTimeOffForm,
+    AgendamentoForm,           # <- form de agendamento no app correto
+)
+from agendamentos.models import (
+    Agendamento,
+    StatusAgendamento,
+    BarberAvailability,
+    BarbeiroAvailability as Availability,
+    BarbeiroTimeOff as TimeOff,
+)
+from barbearias.models import BarberShop
 
-# --- imports tolerantes para Availability/TimeOff (nomes novos/antigos) ---
-try:
-    from agendamentos.models import BarbeiroAvailability as Availability, BarbeiroTimeOff as TimeOff
-except Exception:
-    from agendamentos.models import BarberAvailability as Availability, BarberTimeOff as TimeOff
-
-# forms (mantém retrocompatibilidade por aliases definidos no arquivo de forms)
-try:
-    from agendamentos.forms import BarbeiroAvailabilityForm as AvailabilityForm, BarbeiroTimeOffForm as TimeOffForm
-except Exception:
-    from agendamentos.forms import BarberAvailabilityForm as AvailabilityForm, BarberTimeOffForm as TimeOffForm
-
-
-# -------------------------------
+# ---------------------------------------------------
 # Helpers
-# -------------------------------
+# ---------------------------------------------------
 def _parse_date(s: str, default: date) -> date:
+    """Aceita 'YYYY-MM-DD' (campo <input type=date>) e retorna date; fallback = default."""
     try:
         return datetime.strptime(s, "%Y-%m-%d").date()
     except Exception:
@@ -63,18 +63,7 @@ def _day_slots(d: date, start_h: int = 8, end_h: int = 20, step_min: int = 30):
     return out
 
 
-def _sol_qs():
-    """select_related('servico') quando for FK; senão plain .all()."""
-    try:
-        f = Solicitacao._meta.get_field("servico")
-        if getattr(f, "is_relation", False) and (getattr(f, "many_to_one", False) or getattr(f, "one_to_one", False)):
-            return Solicitacao.objects.select_related("servico")
-    except Exception:
-        pass
-    return Solicitacao.objects.all()
-
-
-def _generate_slots(d: date, rule: BarberAvailability | None, timeoffs_qs):
+def _generate_slots(d: date, rule: Availability | None, timeoffs_qs):
     """
     Lista de slots do dia com flags:
       - available: True/False
@@ -122,22 +111,23 @@ def _generate_slots(d: date, rule: BarberAvailability | None, timeoffs_qs):
     return slots
 
 
-# -------------------------------
-# AGENDA redirect
-# -------------------------------
-def agenda_redirect(request):
-    return redirect("agendamentos:agenda_semana")
+# ---------------------------------------------------
+# Redirect principal
+# ---------------------------------------------------
+def agenda_redirect(request, shop_slug):
+    return redirect("agendamentos:agenda_semana", shop_slug=shop_slug)
 
 
-# -------------------------------
-# AGENDA DIA
-# -------------------------------
-def agenda_dia(request):
+# ---------------------------------------------------
+# AGENDA — DIA
+# ---------------------------------------------------
+@login_required
+def agenda_dia(request, shop_slug):
     """
-    Agenda do dia do barbeiro autenticado.
-    Sobrepõe SOLICITAÇÕES CONFIRMADAS aos slots (livre/almoço/folga).
-    ?dia=YYYY-MM-DD
+    Agenda do dia do barbeiro autenticado (apenas AGENDAMENTOS confirmados).
     """
+    shop = get_object_or_404(BarberShop, slug=shop_slug)
+
     tz = timezone.get_current_timezone()
     dia_str = (request.GET.get("dia") or request.GET.get("data") or "").strip()
     d = _parse_date(dia_str, timezone.localdate())
@@ -153,26 +143,21 @@ def agenda_dia(request):
     # Slots base
     slots = _generate_slots(d, rule, offs_qs)
 
-    # Solicitações confirmadas (margem 2h para pegar cruzamentos)
+    # Agendamentos confirmados (margem 2h antes para pegar cruzamentos que estendem do dia anterior)
     query_start = start - timedelta(hours=2)
-    confirmadas = (
-        _sol_qs()
-        .filter(status=SolicitacaoStatus.CONFIRMADA, inicio__gte=query_start, inicio__lt=end)
+    agendamentos = (
+        Agendamento.objects.filter(
+            shop=shop,
+            barbeiro=request.user,
+            status=StatusAgendamento.CONFIRMADO,
+            inicio__gte=query_start,
+            inicio__lt=end,
+        )
+        .select_related("cliente", "servico")
         .order_by("inicio")
     )
 
-    DEFAULT_STEP_MIN = (rule.slot_minutes if rule else 30)
-    intervals = []
-    for s in confirmadas:
-        s_start = s.inicio
-        dur_min = getattr(getattr(s, "servico", None), "duracao_min", None)
-        if s.fim:
-            s_end = s.fim
-        elif s_start and dur_min:
-            s_end = s_start + timedelta(minutes=dur_min)
-        else:
-            s_end = s_start + timedelta(minutes=DEFAULT_STEP_MIN)
-        intervals.append((s_start, s_end, s))
+    intervals = [(a.inicio, a.fim, a) for a in agendamentos]
 
     rows = []
     for slot in slots:
@@ -185,20 +170,19 @@ def agenda_dia(request):
             "occupied": False,
             "conflicts": max(0, len(overlaps) - 1),
             "available": slot["available"],
-            "reason": slot["reason"],  # None | "almoco" | "folga"
+            "reason": slot["reason"],
         }
 
         if overlaps:
-            s_start, s_end, s = overlaps[0]
-            if t == s_start:
+            a_start, a_end, ag = overlaps[0]
+            if t == a_start:
                 row["item"] = {
-                    "id": s.id,
-                    "cliente_nome": s.nome or s.telefone or "—",
-                    "servico_nome": getattr(getattr(s, "servico", None), "nome", None)
-                                    or getattr(s, "servico", None) or "—",
-                    "status": s.status,
-                    "inicio": s.inicio,
-                    "fim": s_end,
+                    "id": ag.id,
+                    "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
+                    "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
+                    "status": ag.status,
+                    "inicio": ag.inicio,
+                    "fim": ag.fim,
                 }
             else:
                 row["occupied"] = True
@@ -213,33 +197,32 @@ def agenda_dia(request):
         "prev_day": prev_day,
         "next_day": next_day,
         "rows": rows,
+        "shop": shop,
     }
     return render(request, "agendamentos/agenda_dia.html", ctx)
 
 
-# -------------------------------
-# AGENDA SEMANA
-# -------------------------------
-def agenda_semana(request):
+# ---------------------------------------------------
+# AGENDA — SEMANA
+# ---------------------------------------------------
+@login_required
+def agenda_semana(request, shop_slug):
     """
-    Grade semanal por barbeiro:
-      - Linhas = horários unificados
-      - Colunas = seg..dom
-      - Célula usa disponibilidade (Livre/Almoço/Folga) + solicitações confirmadas
-    ?data=YYYY-MM-DD  ?barbeiro=<id>
+    Grade semanal por barbeiro (apenas AGENDAMENTOS confirmados).
     """
+    shop = get_object_or_404(BarberShop, slug=shop_slug)
+
     tz = timezone.get_current_timezone()
     hoje = timezone.localdate()
     base = _parse_date(request.GET.get("data", ""), hoje)
     wk_start, wk_end = _week_bounds(base)
 
-    # --- resolve barbeiro alvo ---
+    # resolve barbeiro alvo
     barbeiro = None
     barbeiro_param = (request.GET.get("barbeiro") or "").strip()
     if barbeiro_param:
+        User = get_user_model()
         try:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
             barbeiro = User.objects.get(pk=barbeiro_param)
         except Exception:
             barbeiro = None
@@ -247,15 +230,13 @@ def agenda_semana(request):
         barbeiro = request.user
 
     DEFAULT_START_H, DEFAULT_END_H, DEFAULT_STEP_MIN = 8, 20, 30
-
     days = [wk_start + timedelta(days=i) for i in range(7)]
     day_labels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
     days_ctx = [{"date": d, "label": day_labels[i]} for i, d in enumerate(days)]
 
-    day_windows_map = {}
-    day_slots_map = {}
+    # janelas/slots por dia
+    day_windows_map, day_slots_map = {}, {}
     used_custom_rules = False
-
     if barbeiro:
         try:
             from .utils import work_windows_for_day, split_in_slots, subtract_timeoffs
@@ -291,100 +272,64 @@ def agenda_semana(request):
     for d in days:
         for dt_slot in day_slots_map[d]:
             time_keys.add((dt_slot.hour, dt_slot.minute))
-        for ws, we, _ in day_windows_map.get(d, []):
-            cur = ws
-            while cur < we:
-                time_keys.add((cur.hour, cur.minute))
-                cur += timedelta(minutes=DEFAULT_STEP_MIN)
     time_keys = sorted(time_keys)
 
-    day_slot_keysets = {d: {(dt.hour, dt.minute) for dt in day_slots_map.get(d, [])} for d in days}
-
-    def _in_work_window(d: date, hh: int, mm: int) -> bool:
-        dt = timezone.make_aware(datetime(d.year, d.month, d.day, hh, mm), tz)
-        for ws, we, _ in day_windows_map.get(d, []):
-            if ws <= dt < we:
-                return True
-        return False
-
-    # solicitações confirmadas da semana (com margem)
+    # agendamentos confirmados
     week_start_dt = timezone.make_aware(datetime(wk_start.year, wk_start.month, wk_start.day, 0, 0, 0), tz)
     query_start = week_start_dt - timedelta(hours=6)
     week_end_dt = week_start_dt + timedelta(days=7)
 
-    qs = _sol_qs().filter(status=SolicitacaoStatus.CONFIRMADA, inicio__lt=week_end_dt, inicio__gte=query_start)
-    if barbeiro and hasattr(Solicitacao, "barbeiro_id"):
+    qs = Agendamento.objects.filter(
+        shop=shop,
+        status=StatusAgendamento.CONFIRMADO,
+        inicio__lt=week_end_dt,
+        inicio__gte=query_start,
+    ).select_related("cliente", "servico")
+    if barbeiro:
         qs = qs.filter(barbeiro=barbeiro)
     confirmadas = list(qs.order_by("inicio"))
 
     # indexa por dia
     day_intervals = {d: [] for d in days}
-    for s in confirmadas:
-        s_start = s.inicio
-        dur_min = getattr(getattr(s, "servico", None), "duracao_min", None)
-        s_end = s.fim or (s_start + timedelta(minutes=dur_min or DEFAULT_STEP_MIN))
-
+    for ag in confirmadas:
+        s_start, s_end = ag.inicio, ag.fim
         curr = s_start.date()
         last = s_end.date()
         while curr <= last:
             if curr in day_intervals:
-                day_intervals[curr].append((s_start, s_end, s))
+                day_intervals[curr].append((s_start, s_end, ag))
             curr += timedelta(days=1)
 
+    # monta linhas
     rows = []
     for (hh, mm) in time_keys:
         time_label = timezone.make_aware(datetime(wk_start.year, wk_start.month, wk_start.day, hh, mm), tz)
         cells = []
         for d in days:
             slot_dt = timezone.make_aware(datetime(d.year, d.month, d.day, hh, mm), tz)
-
-            matches = [(a, b, s) for (a, b, s) in day_intervals.get(d, []) if a <= slot_dt < b]
-
-            has_slot = (hh, mm) in day_slot_keysets.get(d, set())
-            in_window = _in_work_window(d, hh, mm)
-            available = has_slot
-            reason = None
-            if not has_slot:
-                reason = "almoco" if in_window else "folga"
+            matches = [(a, b, ag) for (a, b, ag) in day_intervals.get(d, []) if a <= slot_dt < b]
+            available, reason = True, None
+            if not ((hh, mm) in {(dt.hour, dt.minute) for dt in day_slots_map.get(d, [])}):
+                available, reason = False, "folga"
 
             if matches:
-                s_start, s_end, s = matches[0]
+                s_start, s_end, ag = matches[0]
                 if slot_dt == s_start:
-                    cells.append({
-                        "item": {
-                            "id": s.id,
-                            "cliente_nome": s.nome or s.telefone or "—",
-                            "servico_nome": (getattr(getattr(s, "servico", None), "nome", None)
-                                             or getattr(s, "servico", None) or "—"),
-                            "inicio": s_start,
-                            "fim": s_end,
-                            "status": s.status,
-                        },
-                        "occupied": False,
-                        "time": slot_dt,
-                        "available": available,
-                        "reason": reason,
-                        "conflicts": max(0, len(matches) - 1),
-                    })
+                    cells.append({"item": {
+                        "id": ag.id,
+                        "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
+                        "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
+                        "inicio": s_start,
+                        "fim": s_end,
+                        "status": ag.status,
+                    }, "occupied": False, "time": slot_dt, "available": available, "reason": reason,
+                        "conflicts": max(0, len(matches) - 1)})
                 else:
-                    cells.append({
-                        "item": None,
-                        "occupied": True,
-                        "time": slot_dt,
-                        "available": available,
-                        "reason": reason,
-                        "conflicts": max(0, len(matches) - 1),
-                    })
+                    cells.append({"item": None, "occupied": True, "time": slot_dt,
+                                  "available": available, "reason": reason, "conflicts": max(0, len(matches) - 1)})
             else:
-                cells.append({
-                    "item": None,
-                    "occupied": False,
-                    "time": slot_dt,
-                    "available": available,
-                    "reason": reason,
-                    "conflicts": 0,
-                })
-
+                cells.append({"item": None, "occupied": False, "time": slot_dt,
+                              "available": available, "reason": reason, "conflicts": 0})
         rows.append({"time": time_label, "cells": cells})
 
     prev_week, next_week = _week_nav(base)
@@ -399,13 +344,14 @@ def agenda_semana(request):
         "next_week": next_week,
         "barbeiro": barbeiro,
         "used_custom_rules": used_custom_rules,
+        "shop": shop,
     }
     return render(request, "agendamentos/agenda_semana.html", ctx)
 
 
-# -------------------------------
-# AGENDA MÊS
-# -------------------------------
+# ---------------------------------------------------
+# AGENDA — MÊS
+# ---------------------------------------------------
 def _month_nav(d: date) -> tuple[date, date]:
     first = d.replace(day=1)
     prev_last = first - timedelta(days=1)
@@ -414,11 +360,13 @@ def _month_nav(d: date) -> tuple[date, date]:
     return prev, next_first
 
 
-def agenda_mes(request):
+@login_required
+def agenda_mes(request, shop_slug):
     """
-    Agenda mensal baseada em SOLICITAÇÕES CONFIRMADAS.
-    Gera OrderedDict[date -> list[dict]] para o template.
+    Agenda mensal baseada em AGENDAMENTOS confirmados.
     """
+    shop = get_object_or_404(BarberShop, slug=shop_slug)
+
     hoje = timezone.localdate()
     ref_date = _parse_date(request.GET.get("data", ""), hoje).replace(day=1)
 
@@ -429,23 +377,29 @@ def agenda_mes(request):
     start_dt = timezone.make_aware(datetime(year, month, 1, 0, 0, 0), tz)
     end_dt = start_dt + timedelta(days=num_days)
 
-    sol = _sol_qs().filter(status=SolicitacaoStatus.CONFIRMADA, inicio__gte=start_dt, inicio__lt=end_dt).order_by("inicio")
+    ag_qs = (
+        Agendamento.objects.filter(
+            shop=shop,
+            status=StatusAgendamento.CONFIRMADO,
+            inicio__gte=start_dt,
+            inicio__lt=end_dt,
+        )
+        .select_related("cliente", "servico")
+        .order_by("inicio")
+    )
 
-    DEFAULT_STEP_MIN = 30
     tmp = {ref_date + timedelta(days=i): [] for i in range(num_days)}
-
-    for s in sol:
-        d_local = timezone.localtime(s.inicio, tz).date()
+    for ag in ag_qs:
+        d_local = timezone.localtime(ag.inicio, tz).date()
         if d_local not in tmp:
             continue
-        s_end = s.fim or (s.inicio + timedelta(minutes=getattr(getattr(s, "servico", None), "duracao_min", None) or DEFAULT_STEP_MIN))
         tmp[d_local].append({
-            "id": s.id,
-            "inicio": s.inicio,
-            "fim": s_end,
-            "cliente_nome": s.nome or s.telefone or "—",
-            "servico_nome": (getattr(getattr(s, "servico", None), "nome", None) or getattr(s, "servico", None) or "—"),
-            "status": s.status,
+            "id": ag.id,
+            "inicio": ag.inicio,
+            "fim": ag.fim,
+            "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
+            "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
+            "status": ag.status,
         })
 
     por_dia = OrderedDict(sorted(tmp.items(), key=lambda kv: kv[0]))
@@ -462,156 +416,257 @@ def agenda_mes(request):
         "dias_semana": dias_semana,
         "prev_month": prev_month,
         "next_month": next_month,
+        "shop": shop,
     }
     return render(request, "agendamentos/agenda_mes.html", ctx)
 
 
-# -------------------------------
-# MINHA AGENDA (barbeiro autenticado)
-# -------------------------------
+# ---------------------------------------------------
+# MINHA AGENDA (configs do barbeiro)
+# ---------------------------------------------------
 @login_required
-def minha_agenda_config(request):
+def minha_agenda_config(request, shop_slug):
     """
-    Tela única: regras semanais + folgas + prévia do dia.
-    ?data=YYYY-MM-DD
+    Configuração da agenda do barbeiro logado:
+    - Regras semanais
+    - Folgas
+    - Prévia de slots
     """
-    AvailabilityFS = modelformset_factory(Availability, form=AvailabilityForm, extra=0, can_delete=False)
+    shop = get_object_or_404(BarberShop, slug=shop_slug)
+    barbeiro = request.user
 
-    # Bootstrap das 7 linhas (se faltar alguma)
-    defaults = {
-        0: ("09:00", "19:00"),
-        1: ("09:00", "19:00"),
-        2: ("09:00", "19:00"),
-        3: ("09:00", "19:00"),
-        4: ("09:00", "19:00"),
-        5: ("09:00", "14:00"),
-        6: (None, None),  # domingo off
-    }
-    existing = {a.weekday: a for a in Availability.objects.filter(barbeiro=request.user)}
-    to_create = []
-    for wd in range(7):
-        if wd not in existing:
-            st, en = defaults[wd]
-            to_create.append(
+    AvailabilityFormSet = modelformset_factory(
+        Availability,
+        form=BarbeiroAvailabilityForm,
+        extra=0,
+        can_delete=False,
+    )
+
+    # Regras existentes (ou cria defaults)
+    qs = Availability.objects.filter(barbeiro=barbeiro).order_by("weekday")
+    if not qs.exists():
+        defaults = []
+        for wd in range(7):  # 0=Seg ... 6=Dom
+            defaults.append(
                 Availability(
-                    barbeiro=request.user,
+                    barbeiro=barbeiro,
                     weekday=wd,
-                    is_active=bool(st and en),
-                    start_time=st or "09:00",
-                    end_time=en or "17:00",
+                    start_time="08:00",
+                    end_time="18:00",
                     slot_minutes=30,
+                    is_active=(wd < 6),  # desativa domingo
                 )
             )
-    if to_create:
-        Availability.objects.bulk_create(to_create)
+        Availability.objects.bulk_create(defaults)
+        qs = Availability.objects.filter(barbeiro=barbeiro).order_by("weekday")
 
-    qs = Availability.objects.filter(barbeiro=request.user).order_by("weekday")
-
-    hoje = timezone.localdate()
-    d = _parse_date(request.GET.get("data", ""), hoje)
+    formset = AvailabilityFormSet(queryset=qs, prefix="rules")
+    off_form = BarbeiroTimeOffForm(prefix="off")
 
     if request.method == "POST":
-        formset = AvailabilityFS(request.POST, queryset=qs)
-        off_form = TimeOffForm(request.POST)
+        action = (request.POST.get("action") or "").strip()
 
-        ok = formset.is_valid()
-        if ok:
-            instances = formset.save(commit=False)
-            for inst in instances:
-                inst.barbeiro = request.user
-                if not inst.is_active:
-                    inst.lunch_start = None
-                    inst.lunch_end = None
-                inst.save()
-
-        if off_form.is_valid():
-            off = off_form.save(commit=False)
-            off.barbeiro = request.user
-            if off.start and off.end and off.start < off.end:
-                off.save()
-                messages.success(request, "Folga registrada.")
+        # Salvar REGRAS (formset)
+        if action == "rules" or "rules-TOTAL_FORMS" in request.POST:
+            formset = AvailabilityFormSet(request.POST, queryset=qs, prefix="rules")
+            if formset.is_valid():
+                instances = formset.save(commit=False)
+                for inst in instances:
+                    inst.barbeiro = barbeiro
+                    if not inst.is_active:
+                        inst.lunch_start = None
+                        inst.lunch_end = None
+                    inst.save()
+                messages.success(request, "Regras semanais salvas com sucesso.")
+                return redirect("agendamentos:minha_agenda_config", shop_slug=shop_slug)
             else:
+                any_error = False
+                for idx, f in enumerate(formset.forms):
+                    if f.errors:
+                        any_error = True
+                        messages.error(
+                            request,
+                            f"Dia #{idx+1}: " + "; ".join(
+                                [f"{k}: {', '.join(v)}" for k, v in f.errors.items()]
+                            )
+                        )
+                if not any_error:
+                    messages.error(request, "Revise os campos das regras semanais.")
+
+        # Salvar FOLGA
+        elif action == "off" or "off-start" in request.POST:
+            off_form = BarbeiroTimeOffForm(request.POST, prefix="off")
+            if off_form.is_valid():
+                off = off_form.save(commit=False)
+                off.barbeiro = barbeiro
+                if off.start and off.end and off.start < off.end:
+                    off.save()
+                    messages.success(request, "Folga adicionada.")
+                    return redirect("agendamentos:minha_agenda_config", shop_slug=shop_slug)
                 messages.error(request, "Período de folga inválido.")
+            else:
+                messages.error(
+                    request,
+                    "; ".join([f"{k}: {', '.join(v)}" for k, v in off_form.errors.items()]) or
+                    "Não foi possível salvar a folga. Verifique os campos."
+                )
 
-        if ok:
-            messages.success(request, "Regras salvas.")
-            return redirect(f"{request.path}?data={d.isoformat()}")
+    # Pré-visualização de slots do dia
+    dia_str = (request.GET.get("data") or "").strip()
+    try:
+        preview_date = date.fromisoformat(dia_str) if dia_str else timezone.localdate()
+    except Exception:
+        preview_date = timezone.localdate()
 
-    else:
-        formset = AvailabilityFS(queryset=qs)
-        off_form = TimeOffForm()
+    rule = Availability.objects.filter(
+        barbeiro=barbeiro, weekday=preview_date.weekday()
+    ).first()
+    preview_slots = rule.gerar_slots(preview_date, barbeiro) if rule else []
 
-    rule = qs.filter(weekday=d.weekday()).first()
-    slots = _generate_slots(d, rule, TimeOff.objects.filter(barbeiro=request.user))
+    offs = TimeOff.objects.filter(
+        barbeiro=barbeiro, end__gte=timezone.now()
+    ).order_by("start")[:20]
 
-    ctx = {
-        "title": "Minha agenda",
-        "formset": formset,
-        "off_form": off_form,
-        "offs": TimeOff.objects.filter(barbeiro=request.user).order_by("-start")[:20],
-        "preview_date": d,
-        "preview_weekday": d.weekday(),
-        "preview_slots": slots,
-    }
-    return render(request, "agendamentos/minha_agenda.html", ctx)
+    return render(
+        request,
+        "agendamentos/minha_agenda.html",
+        {
+            "formset": formset,
+            "off_form": off_form,
+            "offs": offs,
+            "preview_date": preview_date,
+            "preview_slots": preview_slots,
+            "shop": shop,
+        },
+    )
 
 
-# ----------------- Criar Agendamento direto (opcional) -----------------
-def agendamento_novo(request, solicitacao_id=None):
+# ---------------------------------------------------
+# NOVO AGENDAMENTO (manual, já CONFIRMADO)
+# ---------------------------------------------------
+@login_required
+def agendamento_novo(request, shop_slug, solicitacao_id=None):
     """
-    Cria um atendimento (Agendamento) direto.
-    - Se 'fim' não vier, calcula por servico.duracao_min (fallback 30).
-    - Preenche snapshots (servico_nome/cliente_nome).
-    - Valida conflito de horário para o barbeiro.
-    - Opcionalmente vincula a uma Solicitação existente (solicitacao_id).
+    Cria um agendamento **confirmado** (independente de Solicitação).
+    Se vier de uma Solicitação confirmada, você pode passar params via GET.
     """
-    initial = {}
-    if request.user.is_authenticated:
-        initial["barbeiro"] = request.user
+    shop = get_object_or_404(BarberShop, slug=shop_slug)
+    User = get_user_model()
+
+    # --------- parâmetros GET ----------
+    barbeiro_id = (request.GET.get("barbeiro") or "").strip()
+    dia_param   = (request.GET.get("dia") or "").strip()
+    cliente_id  = (request.GET.get("cliente") or "").strip()
+    cliente_nome_param = (request.GET.get("cliente_nome") or "").strip()
+    servico_id  = (request.GET.get("servico") or "").strip()
+    want_debug  = (request.GET.get("debug") == "1")
+
+    dia = _parse_date(dia_param, timezone.localdate())
+
+    barbeiro = None
+    if barbeiro_id and barbeiro_id.isdigit():
+        try:
+            barbeiro = User.objects.get(pk=int(barbeiro_id))
+        except User.DoesNotExist:
+            barbeiro = None
+
+    # --------- slots disponíveis ----------
+    slots_disponiveis = []
+    debug_lines = []
+    if barbeiro:
+        rule = Availability.objects.filter(barbeiro=barbeiro, weekday=dia.weekday()).first()
+        if rule:
+            slots_disponiveis = [s for s in rule.gerar_slots(dia, barbeiro) if s.get("available")]
+            if want_debug:
+                offs_count = TimeOff.objects.filter(barbeiro=barbeiro, start__date=dia).count()
+                ags_count  = Agendamento.objects.filter(barbeiro=barbeiro, inicio__date=dia).count()
+                debug_lines += [
+                    f"Dia: {dia.isoformat()}",
+                    f"Barbeiro: {barbeiro} (id={barbeiro.pk})",
+                    f"Regra: slot {rule.slot_minutes} min | {rule.start_time}–{rule.end_time}",
+                    f"Folgas no dia: {offs_count}",
+                    f"Agendamentos no dia: {ags_count}",
+                    f"Slots livres: {len(slots_disponiveis)}",
+                ]
+        elif want_debug:
+            debug_lines += [
+                f"Dia: {dia.isoformat()}",
+                f"Barbeiro: {barbeiro} (id={barbeiro.pk})",
+                "Regra: nenhuma",
+                "Slots livres: 0",
+            ]
+    elif want_debug:
+        debug_lines += ["Barbeiro: None", f"Dia: {dia.isoformat()}"]
+
+    debug_info = "\n".join(debug_lines) if want_debug else ""
+
+    # Horário selecionado
+    sel_inicio = request.POST.get("inicio") or request.GET.get("inicio") or ""
+
+    # --------- montar form ----------
+    initial = {"status": StatusAgendamento.CONFIRMADO}
+    if barbeiro:
+        initial["barbeiro"] = barbeiro.pk
+    if cliente_id and cliente_id.isdigit():
+        initial["cliente"] = int(cliente_id)
+    if cliente_nome_param:
+        initial["cliente_nome"] = cliente_nome_param
+    if servico_id and servico_id.isdigit():
+        initial["servico"] = int(servico_id)
 
     if request.method == "POST":
-        form = AgendamentoForm(request.POST)
+        form = AgendamentoForm(request.POST, initial=initial)
         if form.is_valid():
             ag = form.save(commit=False)
+            ag.shop = shop
 
-            # Preenche snapshots úteis
+            # por definição do Plano B, Agendamento é CONFIRMADO
+            ag.status = StatusAgendamento.CONFIRMADO
+
+            # snapshots
             if ag.servico and not ag.servico_nome:
                 ag.servico_nome = ag.servico.nome
             if ag.cliente_id and not ag.cliente_nome:
-                # Usa nome cadastrado; se vazio, mantém o digitado
                 ag.cliente_nome = ag.cliente.nome or ag.cliente_nome
 
-            # Define fim se não veio (servico.duracao_min -> fallback 30 min)
-            if ag.inicio and not ag.fim:
-                dur = getattr(getattr(ag, "servico", None), "duracao_min", None) or 30
-                ag.fim = ag.inicio + timedelta(minutes=int(dur))
+            # garante fim
+            if not ag.fim:
+                ag.calcular_fim_pelo_servico()
 
-            # Barbeiro padrão: usuário logado (se não escolhido)
-            if not ag.barbeiro_id and request.user.is_authenticated:
-                ag.barbeiro = request.user
+            # conflito
+            if ag.barbeiro_id and ag.inicio and ag.fim:
+                if Agendamento.existe_conflito(ag.barbeiro, ag.inicio, ag.fim):
+                    form.add_error(None, "Conflito de horário para este barbeiro.")
 
-            # Checagem de conflito
-            if ag.barbeiro_id and Agendamento.existe_conflito(ag.barbeiro, ag.inicio, ag.fim):
-                form.add_error(None, "Conflito de horário para este barbeiro.")
-            else:
-                # Vincula a uma Solicitação (opcional)
-                if solicitacao_id and not ag.solicitacao_id:
-                    try:
-                        from solicitacoes.models import Solicitacao
-                        ag.solicitacao = get_object_or_404(Solicitacao, pk=solicitacao_id)
-                        # se a solicitação tiver cliente/serviço, você pode espelhar aqui se quiser
-                    except Exception:
-                        pass
-
+            if not form.errors:
                 ag.save()
                 messages.success(request, "Atendimento criado com sucesso.")
-                # redirecione para sua tela preferida
-                return redirect("painel:agenda")  # ou "agendamentos:agenda_dia"
+                return redirect("agendamentos:agenda_dia", shop_slug=shop.slug)
     else:
         form = AgendamentoForm(initial=initial)
+
+    # Aplicar preço sugerido se serviço veio por GET
+    if not form.is_bound and servico_id and servico_id.isdigit():
+        try:
+            servico_sel = form.fields["servico"].queryset.get(pk=int(servico_id))
+            form.fields["preco_cobrado"].initial = getattr(servico_sel, "preco", None)
+        except Exception:
+            pass
+
+    # reconstruir URL ao trocar barbeiro/data
+    preserve_params = {}
+    if cliente_id: preserve_params["cliente"] = cliente_id
+    if cliente_nome_param: preserve_params["cliente_nome"] = cliente_nome_param
+    if servico_id: preserve_params["servico"] = servico_id
 
     ctx = {
         "title": "Novo atendimento",
         "form": form,
+        "shop": shop,
+        "dia": dia,
+        "slots_disponiveis": slots_disponiveis,
+        "preserve_params": preserve_params,
+        "debug_info": debug_info,
+        "sel_inicio": sel_inicio,
     }
     return render(request, "agendamentos/agendamento_form.html", ctx)

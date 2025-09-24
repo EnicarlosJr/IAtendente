@@ -6,7 +6,7 @@
 {% block content %}
 
 <div class="relative">
-  <!-- BG decorativo suave -->
+  <!-- BG decorativo -->
   <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
     <div class="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-gradient-to-tr from-blue-200 to-emerald-200 opacity-30 blur-3xl"></div>
     <div class="absolute top-1/2 -right-40 h-96 w-96 rounded-full bg-gradient-to-tr from-fuchsia-200 to-indigo-200 opacity-25 blur-3xl"></div>
@@ -29,13 +29,13 @@
           {% endif %}
         </div>
         <div class="flex items-center gap-2">
-          <a href="{% url 'clientes:lista' %}" class="inline-flex items-center rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">Cancelar</a>
+          <a href="{% url 'clientes:lista' shop.slug %}" class="inline-flex items-center rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">Cancelar</a>
           <button form="clienteForm" class="inline-flex items-center rounded-xl bg-blue-600 text-white px-4 py-2 text-sm hover:bg-blue-700 shadow-sm">Salvar</button>
         </div>
       </div>
     </section>
 
-    <!-- Mensagens de erro gerais -->
+    <!-- Mensagens de erro -->
     {% if form.non_field_errors %}
       <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4">
         {% for e in form.non_field_errors %}<div class="text-sm text-amber-800">{{ e }}</div>{% endfor %}
@@ -49,30 +49,29 @@
       <!-- Dados básicos -->
       <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
         <h2 class="text-sm font-semibold text-slate-900 mb-4">Dados básicos</h2>
-
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="{{ form.nome.id_for_label }}">Nome</label>
+            <label for="{{ form.nome.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">Nome</label>
             {{ form.nome }}
-            <p class="text-xs text-slate-500 mt-1">O nome como será exibido no atendimento.</p>
             {% for err in form.nome.errors %}<p class="text-xs text-rose-600 mt-1">{{ err }}</p>{% endfor %}
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="{{ form.telefone.id_for_label }}">Telefone</label>
+            <label for="{{ form.telefone.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">Telefone</label>
             {{ form.telefone }}
             <p class="text-xs text-slate-500 mt-1">Ex.: (11) 98888-7777</p>
             {% for err in form.telefone.errors %}<p class="text-xs text-rose-600 mt-1">{{ err }}</p>{% endfor %}
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="{{ form.recorrencia_status.id_for_label }}">Recorrência</label>
+            <label for="{{ form.recorrencia_status.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">Recorrência</label>
             {{ form.recorrencia_status }}
             {% for err in form.recorrencia_status.errors %}<p class="text-xs text-rose-600 mt-1">{{ err }}</p>{% endfor %}
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="{{ form.barbeiro_preferido.id_for_label }}">Barbeiro preferido</label>
+            <label for="{{ form.barbeiro_preferido.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">Barbeiro preferido</label>
             {{ form.barbeiro_preferido }}
             <p class="text-xs text-slate-500 mt-1">Opcional</p>
             {% for err in form.barbeiro_preferido.errors %}<p class="text-xs text-rose-600 mt-1">{{ err }}</p>{% endfor %}
@@ -83,26 +82,23 @@
       <!-- Preferências & histórico -->
       <section class="bg-white border border-slate-200 rounded-2xl shadow-sm p-5">
         <h2 class="text-sm font-semibold text-slate-900 mb-4">Preferências & histórico</h2>
-
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
           <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="{{ form.preferencias.id_for_label }}">Preferências</label>
+            <label for="{{ form.preferencias.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">Preferências</label>
             {{ form.preferencias }}
-            <p class="text-xs text-slate-500 mt-1">Ex.: Degradê #1, acabamento navalha, sem pós com álcool…</p>
             {% for err in form.preferencias.errors %}<p class="text-xs text-rose-600 mt-1">{{ err }}</p>{% endfor %}
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="{{ form.ultimo_corte.id_for_label }}">Último corte</label>
+            <label for="{{ form.ultimo_corte.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">Último corte</label>
             {{ form.ultimo_corte }}
-            <p class="text-xs text-slate-500 mt-1">Opcional — útil para recorrência.</p>
             {% for err in form.ultimo_corte.errors %}<p class="text-xs text-rose-600 mt-1">{{ err }}</p>{% endfor %}
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="{{ form.foto_url.id_for_label }}">Foto (URL)</label>
+            <label for="{{ form.foto_url.id_for_label }}" class="block text-sm font-medium text-slate-700 mb-1">Foto (URL)</label>
             {{ form.foto_url }}
-            <p class="text-xs text-slate-500 mt-1">Link público para a foto do cliente.</p>
             {% for err in form.foto_url.errors %}<p class="text-xs text-rose-600 mt-1">{{ err }}</p>{% endfor %}
 
             <div class="mt-2">
@@ -117,14 +113,10 @@
         <h2 class="text-sm font-semibold text-slate-900 mb-2">Tags</h2>
         <p class="text-xs text-slate-500 mb-3">Separe por vírgulas. Salvamos como lista JSON.</p>
 
-        <div class="hidden">
-          {{ form.tags }}
-          {% for err in form.tags.errors %}<p class="text-xs text-rose-600 mt-1">{{ err }}</p>{% endfor %}
-        </div>
-
+        <div class="hidden">{{ form.tags }}</div>
         <input id="tags-simple" type="text"
-               class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
-               placeholder="Ex.: fidelidade, fade, barba, quinta-feira"/>
+               class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm"
+               placeholder="Ex.: fidelidade, fade, barba"/>
         <div id="tags-chips" class="mt-3 flex flex-wrap gap-2"></div>
       </section>
 
@@ -137,7 +129,7 @@
         <div class="bg-white/90 backdrop-blur border border-slate-200 rounded-2xl shadow-sm px-4 py-3 flex items-center justify-between">
           <span class="text-xs text-slate-500">Dica: use tags para campanhas segmentadas.</span>
           <div class="flex items-center gap-2">
-            <a href="{% url 'clientes:lista' %}" class="inline-flex items-center rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">Cancelar</a>
+            <a href="{% url 'clientes:lista' shop.slug %}" class="inline-flex items-center rounded-xl border px-4 py-2 text-sm hover:bg-slate-50">Cancelar</a>
             <button form="clienteForm" class="inline-flex items-center rounded-xl bg-blue-600 text-white px-4 py-2 text-sm hover:bg-blue-700 shadow-sm">Salvar</button>
           </div>
         </div>
@@ -147,117 +139,68 @@
   </div>
 </div>
 
-<!-- Progressive enhancement: aplica classes Tailwind nos campos renderizados pelo Django -->
+<!-- Scripts de UX -->
 <script>
-  (function enhanceFields(){
-    const formEl = document.getElementById('clienteForm');
-    if (!formEl) return;
+(function enhanceFields(){
+  const formEl = document.getElementById('clienteForm');
+  if (!formEl) return;
+  const baseInput = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500';
+  formEl.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio])').forEach(el=>el.classList.add(...baseInput.split(' ')));
+  formEl.querySelectorAll('textarea').forEach(el=>el.classList.add(...baseInput.split(' ')));
+  formEl.querySelectorAll('select').forEach(el=>el.classList.add(...baseInput.split(' ')));
+})();
 
-    const baseInput =
-      'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500';
-    const baseTextarea = baseInput + ' min-h-[120px]';
-    const baseSelect = baseInput;
+// IDs tolerantes vindos do Django
+const ID_TEL  = "{{ form.telefone.id_for_label|default:'id_telefone' }}";
+const ID_FOTO = "{{ form.foto_url.id_for_label|default:'id_foto_url' }}";
+const ID_ULT  = "{{ form.ultimo_corte.id_for_label|default:'id_ultimo_corte' }}";
+const ID_TAGS = "{{ form.tags.id_for_label|default:'id_tags' }}";
 
-    formEl.querySelectorAll('input:not([type=hidden]):not([type=checkbox]):not([type=radio])').forEach(el=>{
-      el.classList.add(...baseInput.split(' '));
-    });
-    formEl.querySelectorAll('textarea').forEach(el=>{
-      el.classList.add(...baseTextarea.split(' '));
-    });
-    formEl.querySelectorAll('select').forEach(el=>{
-      el.classList.add(...baseSelect.split(' '));
-    });
-  })();
+// Prévia da foto
+(function fotoPreview(){
+  const input = document.getElementById(ID_FOTO);
+  const img   = document.getElementById('fotoPreview');
+  if (!input || !img) return;
+  const set = () => {
+    const v = (input.value || '').trim();
+    if (v && /^https?:\/\//i.test(v)) { img.src = v; img.classList.remove('hidden'); }
+    else { img.removeAttribute('src'); img.classList.add('hidden'); }
+  };
+  input.addEventListener('input', set); set();
+})();
 
-  // IDs tolerantes vindos do Django
-  const ID_TEL  = "{{ form.telefone.id_for_label|default:'id_telefone' }}";
-  const ID_FOTO = "{{ form.foto_url.id_for_label|default:'id_foto_url' }}";
-  const ID_ULT  = "{{ form.ultimo_corte.id_for_label|default:'id_ultimo_corte' }}";
-  const ID_TAGS = "{{ form.tags.id_for_label|default:'id_tags' }}";
+// Telefone: máscara
+(function phoneMask(){
+  const tel = document.getElementById(ID_TEL);
+  if (!tel) return;
+  tel.inputMode = 'tel';
+  tel.addEventListener('input', () => {
+    let v = tel.value.replace(/\D/g,'').slice(0,11);
+    if (v.length > 6) tel.value = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
+    else if (v.length > 2) tel.value = `(${v.slice(0,2)}) ${v.slice(2)}`;
+    else tel.value = v;
+  });
+})();
 
-  // ultimo_corte como datetime-local (se widget não veio assim)
-  (function ensureDateTimeLocal(){
-    const el = document.getElementById(ID_ULT);
-    if (el && el.tagName === 'INPUT') { try { el.type = 'datetime-local'; } catch(e){} }
-  })();
+// Tags → salva JSON no campo real
+(function tagsUI(){
+  const real  = document.getElementById(ID_TAGS);
+  const input = document.getElementById('tags-simple');
+  const chips = document.getElementById('tags-chips');
+  if (!real || !input || !chips) return;
 
-  // Prévia da foto (URL)
-  (function fotoPreview(){
-    const input = document.getElementById(ID_FOTO);
-    const img   = document.getElementById('fotoPreview');
-    if (!input || !img) return;
-    const set = () => {
-      const v = (input.value || '').trim();
-      if (v && /^https?:\/\//i.test(v)) { img.src = v; img.classList.remove('hidden'); }
-      else { img.removeAttribute('src'); img.classList.add('hidden'); }
-    };
-    input.addEventListener('input', set);
-    set();
-  })();
+  const parseJSONSafe = (s) => { try { return JSON.parse(s)||[] } catch { return [] } };
+  const uniq = (arr) => Array.from(new Set(arr.map(s=>s.trim()).filter(Boolean)));
 
-  // Telefone: máscara leve
-  (function phoneMask(){
-    const tel = document.getElementById(ID_TEL);
-    if (!tel) return;
-    tel.inputMode = 'tel';
-    tel.placeholder = '(11) 98888-7777';
-    tel.addEventListener('input', () => {
-      let v = tel.value.replace(/\D/g,'').slice(0,11);
-      if (v.length > 6)      tel.value = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
-      else if (v.length > 2) tel.value = `(${v.slice(0,2)}) ${v.slice(2)}`;
-      else                   tel.value = v;
-    });
-  })();
+  let state = parseJSONSafe(real.value || '[]');
+  function render(){ chips.innerHTML=''; state.forEach((t,i)=>{chips.innerHTML += `<span class="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs">${t}<button type="button" data-i="${i}" class="ml-1">×</button></span>`;});}
+  function sync(){ real.value = JSON.stringify(state); }
+  render(); sync();
 
-  // Tags → salva JSON no campo real
-  (function tagsUI(){
-    const real  = document.getElementById(ID_TAGS);
-    const input = document.getElementById('tags-simple');
-    const chips = document.getElementById('tags-chips');
-    if (!real || !input || !chips) return;
-
-    const parseJSONSafe = (s) => { try { const v=JSON.parse(s); return Array.isArray(v)? v:[]; } catch { return []; } };
-    const uniq = (arr) => Array.from(new Set(arr.map(s=>s.trim()).filter(Boolean)));
-
-    let state = parseJSONSafe(real.value || '[]');
-
-    function render() {
-      chips.innerHTML = '';
-      state.forEach((t, idx) => {
-        const span = document.createElement('span');
-        span.className = 'inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs';
-        span.innerHTML = `${t} <button type="button" class="ml-1" data-i="${idx}" aria-label="remover">×</button>`;
-        chips.appendChild(span);
-      });
-    }
-    function sync() { real.value = JSON.stringify(state); }
-
-    render(); sync();
-
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
-    input.addEventListener('input', () => {
-      if (input.value.includes(',')) {
-        const parts = input.value.split(',');
-        input.value = parts.pop();
-        state = uniq([...state, ...parts]);
-        render(); sync();
-      }
-    });
-
-    chips.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-i]');
-      if (!btn) return;
-      const i = parseInt(btn.getAttribute('data-i'), 10);
-      state.splice(i,1);
-      render(); sync();
-    });
-
-    document.getElementById('clienteForm').addEventListener('submit', () => {
-      const leftovers = input.value.split(',').map(s=>s.trim()).filter(Boolean);
-      if (leftovers.length) state = uniq([...state, ...leftovers]);
-      sync();
-    });
-  })();
+  input.addEventListener('input',()=>{if(input.value.includes(',')){const parts=input.value.split(',');input.value=parts.pop();state=uniq([...state,...parts]);render();sync();}});
+  chips.addEventListener('click',(e)=>{const i=e.target.getAttribute('data-i');if(i!==null){state.splice(i,1);render();sync();}});
+  document.getElementById('clienteForm').addEventListener('submit',()=>{const leftovers=input.value.split(',').map(s=>s.trim()).filter(Boolean);if(leftovers.length)state=uniq([...state,...leftovers]);sync();});
+})();
 </script>
 
 {% endblock %}

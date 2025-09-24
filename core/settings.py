@@ -1,14 +1,22 @@
 # core/settings.py
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")  # carrega variáveis do .env
 
 # =========================
 # Segurança / Debug
 # =========================
 SECRET_KEY = os.getenv("SECRET_KEY", "troque-esta-chave")
 DEBUG = os.getenv("DEBUG", "1") == "1"
+
+# Ajuste conforme seu ambiente (Docker, localhost etc.)
+import socket
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
+if socket.gethostname() == "seu-host":  # rodando fora do docker
+    POSTGRES_HOST = "127.0.0.1"
 
 # Em Docker, você acessa por 0.0.0.0:8000; mantenha localhost/127.0.0.1 também
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,0.0.0.0").split(",")
@@ -49,19 +57,25 @@ INSTALLED_APPS = [
     # WhiteNoise não precisa app; é só middleware/opcional
 ]
 
+
 MIDDLEWARE = [
+
     "django.middleware.security.SecurityMiddleware",
+
+    # Middleware para selecionar a barbearia atual (contexto multi-tenant)
+    "barbearias.middleware.BarberShopMiddleware",
+    "barbearias.middleware.ShopSlugMiddleware",
 
     # --- WhiteNoise (opcional, recomendado em produção sem Nginx) ---
     # Ative se adicionou 'whitenoise' no requirements.txt
     # "whitenoise.middleware.WhiteNoiseMiddleware",
-
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -77,6 +91,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "barbearias.context_processors.shop_context",  # disponibiliza shop_slug em todos os templates
             ],
         },
     },
@@ -97,16 +112,29 @@ def _env(*keys, default=None):
             return v
     return default
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": _env("POSTGRES_DB", "DB_NAME", default="django_db"),
-        "USER": _env("POSTGRES_USER", "DB_USER", default="django"),
-        "PASSWORD": _env("POSTGRES_PASSWORD", "DB_PASSWORD", default="secret"),
-        "HOST": _env("POSTGRES_HOST", "DB_HOST", default="db"),
-        "PORT": _env("POSTGRES_PORT", "DB_PORT", default="5432"),
+
+DB_ENGINE = os.getenv("DB_ENGINE", "sqlite")
+
+if DB_ENGINE == "postgres":
+    # ⚠️ Fora do Docker, o padrão deve ser 127.0.0.1
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("POSTGRES_DB", "django_db"),
+            "USER": os.getenv("POSTGRES_USER", "django"),
+            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "secret"),
+            "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
+            "PORT": os.getenv("POSTGRES_PORT", "5432"),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / os.getenv("DB_NAME", "db.sqlite3"),
+        }
+    }
+
 
 # =========================
 # Senhas

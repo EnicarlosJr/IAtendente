@@ -1,0 +1,48 @@
+{# Ações para uma Solicitação (sem "CONFIRMADO" aqui) #}
+<div class="flex justify-end gap-2">
+  <a href="{% url 'solicitacoes:detalhe' shop.slug s.id %}"
+     class="btn-action border hover:bg-gray-50">Ver</a>
+
+  {% if s.status == "PENDENTE" %}
+    <button type="button"
+            class="btn-action bg-black text-white hover:opacity-90"
+            data-id="{{ s.id }}"
+            data-confirm-url="{% url 'solicitacoes:confirmar' shop.slug s.id %}"
+            data-deny-url="{% url 'solicitacoes:recusar' shop.slug s.id %}"
+            data-nome="{% firstof s.nome s.cliente.nome s.telefone %}"
+            data-telefone="{% firstof s.telefone s.cliente.telefone '' %}"
+            data-servico="{% firstof s.servico_label s.servico_nome s.servico.nome '' %}"
+            data-servico-id="{{ s.servico_id|default:'' }}"
+            {# preço vem da Solicitação ou do Serviço; NÃO use preco_cobrado (é de Agendamento) #}
+            data-preco="{% firstof s.preco_cotado s.servico.preco '' %}"
+            data-duracao="{% firstof s.duracao_min_cotada s.servico.duracao_min 0 %}"
+            data-inicio="{% if s.inicio %}{{ s.inicio|date:'Y-m-d\\TH:i' }}{% endif %}"
+            onclick="openConfirm(this)">
+      Confirmar
+    </button>
+
+    <button type="button"
+            class="btn-action bg-rose-600 text-white hover:bg-rose-700"
+            data-id="{{ s.id }}"
+            data-deny-url="{% url 'solicitacoes:recusar' shop.slug s.id %}"
+            data-cliente="{% firstof s.nome s.cliente.nome s.telefone %}"
+            onclick="openDeny(this)">
+      Negar
+    </button>
+
+  {% elif s.status == "CONFIRMADA" %}
+    <button type="button"
+            class="btn-action bg-emerald-600 text-white hover:bg-emerald-700"
+            data-finalize-url="{% url 'solicitacoes:finalizar' shop.slug s.id %}"
+            onclick="submitFinalize(this)">
+      Finalizar
+    </button>
+
+    <button type="button"
+            class="btn-action border hover:bg-gray-50"
+            data-noshow-url="{% url 'solicitacoes:no_show' shop.slug s.id %}"
+            onclick="submitNoShow(this)">
+      No-show
+    </button>
+  {% endif %}
+</div>

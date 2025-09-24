@@ -1,12 +1,10 @@
-# painel/views.py
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.shortcuts import render, redirect
 from django.utils import timezone
 from django.core.paginator import Paginator
-from django.db.models import Sum, Count, Q
-from django.db.models.functions import TruncDate, ExtractHour
+from django.db.models import Sum, Q
 from django.contrib.auth.decorators import login_required
 
 from barbearias.models import BarberShop
@@ -51,30 +49,8 @@ WORKDAY_END_H = 20
 
 
 # =========================
-# Helpers de barbearia / sessão
+# Helpers
 # =========================
-def _ensure_shop(request):
-    """Garante que a sessão tenha uma barbearia e retorna BarberShop ou None."""
-    if not getattr(request, "user", None) or not request.user.is_authenticated:
-        return None
-
-    shop_id = request.session.get("shop_id")
-    if shop_id:
-        try:
-            return BarberShop.objects.get(id=shop_id)
-        except BarberShop.DoesNotExist:
-            request.session.pop("shop_id", None)
-
-    sid = get_default_shop_for(request.user)
-    if sid:
-        request.session["shop_id"] = sid
-        try:
-            return BarberShop.objects.get(id=sid)
-        except BarberShop.DoesNotExist:
-            pass
-    return None
-
-
 def _model_has_field(model, field_name: str) -> bool:
     try:
         model._meta.get_field(field_name)
@@ -84,10 +60,7 @@ def _model_has_field(model, field_name: str) -> bool:
 
 
 def _apply_shop_filter(qs, shop):
-    """
-    Filtra QuerySet pela barbearia informada, se o modelo tiver campo:
-    - tenta 'barbearia', 'shop' ou 'barber_shop'
-    """
+    """Filtra QuerySet pela barbearia informada, se o modelo tiver campo."""
     if not shop or not qs:
         return qs
     model = qs.model
@@ -109,19 +82,14 @@ def user_is_manager(user, shop):
     )
 
 
-# =========================
-# Helpers de contexto vazio
-# =========================
-def _empty_dashboard_ctx(shop=None):
+def _empty_dashboard_ctx():
     now = timezone.now()
     hoje = timezone.localdate()
     return {
         "title": "Dashboard",
-        "shop": shop,
         "hoje": hoje,
         "now": now,
         "is_manager": False,
-        # KPIs
         "kpis": {
             "faturamento_mes": Decimal("0.00"),
             "clientes_novos_mes": 0,
@@ -129,22 +97,18 @@ def _empty_dashboard_ctx(shop=None):
             "ticket_medio": Decimal("0.00"),
         },
         "kpis_delta": {"fat_pct": None, "clientes_pct": None, "ticket_pct": None},
-        # Funil
         "funnel_7d": {"total": 0, "confirmadas": 0, "noshow": 0, "conv_pct": 0},
-        # Gráficos
         "chart_fat_labels": [],
         "chart_fat_values": [],
         "chart_srv_labels": [],
         "chart_srv_values": [],
         "chart_peak_labels": [f"{h:02d}h" for h in range(24)],
         "chart_peak_values": [0] * 24,
-        # Relatórios
         "ranking_clientes": [],
         "noshow_30": 0,
         "noshow_rate_30": 0,
         "retencao_30": 0,
         "intervalo_medio_dias": None,
-        # Operacional
         "proximos": [],
         "agenda_hoje": [],
         "solicitacoes_pendentes_count": 0,
@@ -241,18 +205,24 @@ def home(request):
 # =========================
 @login_required
 def dashboard(request):
-    shop = _ensure_shop(request)
+    shop = None
+    if request.user.is_authenticated:
+        sid = get_default_shop_for(request.user)
+        if sid:
+            try:
+                shop = BarberShop.objects.get(id=sid)
+            except BarberShop.DoesNotExist:
+                shop = None
+
     if not shop:
         return render(request, "painel/dashboard.html", _empty_dashboard_ctx())
 
     hoje, now = timezone.localdate(), timezone.now()
     start_m, end_m = _month_window(hoje)
     start_d, end_d = _today_window(hoje)
-    start_30, start_90 = now - timedelta(days=30), now - timedelta(days=90)
 
     is_manager = user_is_manager(request.user, shop)
 
-    # KPIs
     faturamento_mes, atend_mes, ticket_medio, clientes_novos_mes = Decimal("0.00"), 0, Decimal("0.00"), 0
     if HAS_HIST:
         qsm = _apply_shop_filter(HistoricoItem.objects.filter(data__gte=start_m, data__lt=end_m), shop)
@@ -264,7 +234,6 @@ def dashboard(request):
             created_at__gte=start_m, created_at__lt=end_m
         ).count()
 
-    # Ocupação hoje
     utilizacao_hoje = 0
     sol_qs = _sol_qs(shop=shop)
     if sol_qs and SolicitacaoStatus:
@@ -275,10 +244,7 @@ def dashboard(request):
         )
         utilizacao_hoje = int(round((booked_min / total_min) * 100)) if total_min else 0
 
-    # Gráficos e relatórios (iguais ao seu, apenas refatorados)
-    # ...
-
-    ctx = _empty_dashboard_ctx(shop)
+    ctx = _empty_dashboard_ctx()
     ctx.update(
         {
             "is_manager": is_manager,
@@ -288,7 +254,6 @@ def dashboard(request):
                 "utilizacao_hoje": utilizacao_hoje,
                 "ticket_medio": ticket_medio,
             },
-            # TODO: adicionar gráficos, relatórios etc (mantém sua lógica anterior)
         }
     )
     return render(request, "painel/dashboard.html", ctx)
@@ -299,10 +264,18 @@ def dashboard(request):
 # =========================
 @login_required
 def agenda(request):
-    shop = _ensure_shop(request)
+    shop = None
+    if request.user.is_authenticated:
+        sid = get_default_shop_for(request.user)
+        if sid:
+            try:
+                shop = BarberShop.objects.get(id=sid)
+            except BarberShop.DoesNotExist:
+                shop = None
+
     hoje = timezone.localdate()
     agendamentos = []
-    if HAS_SOL and SolicitacaoStatus:
+    if shop and HAS_SOL and SolicitacaoStatus:
         start_today, end_today = _today_window(hoje)
         qs = _sol_qs(shop=shop).filter(inicio__gte=start_today, inicio__lt=end_today)
         qs = qs.filter(
@@ -310,14 +283,13 @@ def agenda(request):
             | Q(status=getattr(SolicitacaoStatus, "REALIZADA", None))
         )
         agendamentos = qs.order_by("inicio")
-    elif HAS_AG:
+    elif shop and HAS_AG:
         agendamentos = _apply_shop_filter(Agendamento.objects.filter(inicio__date=hoje), shop).order_by("inicio")
 
     ctx = {
         "title": "Agenda",
-        "shop": shop,
         "agendamentos": agendamentos,
-        "solicitacoes_pendentes_count": _sol_qs(shop=shop).filter(status="PENDENTE").count() if HAS_SOL else 0,
+        "solicitacoes_pendentes_count": _sol_qs(shop=shop).filter(status="PENDENTE").count() if (shop and HAS_SOL) else 0,
         "is_manager": user_is_manager(request.user, shop),
     }
     return render(request, "agendamentos/agenda.html", ctx)
@@ -326,28 +298,68 @@ def agenda(request):
 # =========================
 # SOLICITAÇÕES
 # =========================
+from itertools import chain
+from django.core.paginator import Paginator
+
 @login_required
 def solicitacoes(request):
-    shop = _ensure_shop(request)
-    if not HAS_SOL:
-        return render(request, "painel/solicitacoes.html", _empty_dashboard_ctx(shop))
+    shop = None
+    if request.user.is_authenticated:
+        sid = get_default_shop_for(request.user)
+        if sid:
+            try:
+                shop = BarberShop.objects.get(id=sid)
+            except BarberShop.DoesNotExist:
+                shop = None
 
-    q, status_ = (request.GET.get("q") or "").strip(), (request.GET.get("status") or "").strip()
-    qs = _sol_qs(shop=shop).order_by("-criado_em")
+    # -------------------------
+    # 1) Query Solicitações
+    # -------------------------
+    sol_qs = _sol_qs(shop=shop).order_by("-criado_em") if (shop and HAS_SOL) else Solicitacao.objects.none()
+
+    # -------------------------
+    # 2) Query Agendamentos
+    # -------------------------
+    ag_qs = Agendamento.objects.none()
+    if shop and HAS_AG:
+        ag_qs = _apply_shop_filter(Agendamento.objects.all(), shop).order_by("-created_at")
+
+    # -------------------------
+    # 3) Filtros
+    # -------------------------
+    q = (request.GET.get("q") or "").strip()
+    status_ = (request.GET.get("status") or "").strip()
+
     if q:
-        qs = qs.filter(Q(nome__icontains=q) | Q(telefone__icontains=q))
-    if status_:
-        qs = qs.filter(status=status_)
+        if HAS_SOL:
+            sol_qs = sol_qs.filter(Q(nome__icontains=q) | Q(telefone__icontains=q))
+        if HAS_AG:
+            ag_qs = ag_qs.filter(Q(cliente_nome__icontains=q) | Q(cliente__telefone__icontains=q))
 
-    page_obj = Paginator(qs, 20).get_page(request.GET.get("page"))
+    if status_:
+        if HAS_SOL:
+            sol_qs = sol_qs.filter(status=status_)
+        if HAS_AG:
+            ag_qs = ag_qs.filter(status=status_)
+
+    # -------------------------
+    # 4) Unir em uma lista única
+    # -------------------------
+    combined = sorted(
+        chain(sol_qs, ag_qs),
+        key=lambda x: getattr(x, "criado_em", None) or getattr(x, "created_at", None),
+        reverse=True,
+    )
+
+    # paginação
+    page_obj = Paginator(combined, 20).get_page(request.GET.get("page"))
 
     ctx = {
         "title": "Solicitações",
-        "shop": shop,
         "solicitacoes": page_obj,
         "page_obj": page_obj,
         "filters": {"q": q, "status": status_},
-        "solicitacoes_pendentes_count": _sol_qs(shop=shop).filter(status="PENDENTE").count(),
+        "solicitacoes_pendentes_count": _sol_qs(shop=shop).filter(status="PENDENTE").count() if (shop and HAS_SOL) else 0,
         "is_manager": user_is_manager(request.user, shop),
     }
     return render(request, "painel/solicitacoes.html", ctx)
@@ -358,13 +370,20 @@ def solicitacoes(request):
 # =========================
 @login_required
 def clientes(request):
-    shop = _ensure_shop(request)
-    lista = _apply_shop_filter(Cliente.objects.all(), shop).order_by("-created_at") if HAS_CLIENTE else []
+    shop = None
+    if request.user.is_authenticated:
+        sid = get_default_shop_for(request.user)
+        if sid:
+            try:
+                shop = BarberShop.objects.get(id=sid)
+            except BarberShop.DoesNotExist:
+                shop = None
+
+    lista = _apply_shop_filter(Cliente.objects.all(), shop).order_by("-created_at") if (shop and HAS_CLIENTE) else []
     ctx = {
         "title": "Clientes",
-        "shop": shop,
         "clientes": lista,
-        "solicitacoes_pendentes_count": _sol_qs(shop=shop).filter(status="PENDENTE").count() if HAS_SOL else 0,
+        "solicitacoes_pendentes_count": _sol_qs(shop=shop).filter(status="PENDENTE").count() if shop else 0,
         "is_manager": user_is_manager(request.user, shop),
     }
     return render(request, "painel/clientes.html", ctx)

@@ -1,5 +1,6 @@
 # solicitacoes/urls.py
 from django.urls import path
+
 from . import views_web
 
 app_name = "solicitacoes"
@@ -14,4 +15,6 @@ urlpatterns = [
     path("<int:pk>/finalizar/", views_web.finalizar_solicitacao, name="finalizar"),
     path("<int:pk>/no-show/", views_web.marcar_no_show, name="no_show"),
     path("<int:pk>/status/", views_web.alterar_status, name="alterar_status"),
+
+
 ]

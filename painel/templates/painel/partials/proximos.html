@@ -1,7 +1,7 @@
 <div class="card overflow-hidden">
   <div class="flex items-center justify-between px-4 py-3 soft-divider">
     <h3 class="section-title">Próximos horários</h3>
-    <a href="{% url 'agendamentos:agenda_dia' %}" class="text-sm text-blue-700 hover:underline">Abrir agenda</a>
+    <a href="{% url 'agendamentos:agenda_dia' shop_slug%}" class="text-sm text-blue-700 hover:underline">Abrir agenda</a>
   </div>
   <div class="divide-y">
     {% for s in proximos %}

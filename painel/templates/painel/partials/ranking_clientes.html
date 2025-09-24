@@ -3,7 +3,13 @@
 <div class="card overflow-hidden">
   <div class="flex items-center justify-between px-4 py-3 soft-divider">
     <h3 class="section-title">Ranking de clientes (mês)</h3>
-    <a href="{% url 'clientes:lista' %}" class="text-sm text-blue-700 hover:underline">Ver todos</a>
+    {% if shop_slug %}
+      <a href="{% url 'clientes:lista' shop_slug %}" class="text-sm text-blue-700 hover:underline">
+        Ver todos
+      </a>
+    {% else %}
+      <span class="text-sm text-slate-400 cursor-not-allowed">Ver todos</span>
+    {% endif %}
   </div>
   <div class="overflow-x-auto">
     <table class="min-w-full text-sm">

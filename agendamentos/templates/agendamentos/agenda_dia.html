@@ -21,71 +21,86 @@
     </div>
   </div>
 
+  {% if rows|length == 0 %}
+    <div class="p-6 text-sm text-slate-600">Sem horários configurados para este dia.</div>
+  {% else %}
+
   <!-- GRID DE PERÍODOS -->
   <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200">
 
-    <!-- ================== MANHÃ ================== -->
+    {# ================== MANHÃ ================== #}
     <section class="p-6">
-      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-        🌅 Manhã
-      </h3>
+      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">🌅 Manhã</h3>
       <div class="relative">
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
         <div class="space-y-6">
+          {% with had_any=false %}
           {% for row in rows %}
-            {% if row.time.hour < 12 %}
+            {% if row.time|date:"H" < '12' %}
+              {% with had_any=true %}
               <div class="relative pl-14">
-                {% include "agendamentos/_agenda_card.html" with row=row %}
+                {% include "agendamentos/_agenda_slot.html" with row=row %}
               </div>
+              {% endwith %}
             {% endif %}
-          {% empty %}
-            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
           {% endfor %}
+          {% if not had_any %}
+            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+          {% endif %}
+          {% endwith %}
         </div>
       </div>
     </section>
 
-    <!-- ================== TARDE ================== -->
+    {# ================== TARDE ================== #}
     <section class="p-6">
-      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-        🌇 Tarde
-      </h3>
+      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">🌇 Tarde</h3>
       <div class="relative">
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
         <div class="space-y-6">
+          {% with had_any=false %}
           {% for row in rows %}
-            {% if row.time.hour >= 12 and row.time.hour < 18 %}
+            {% if row.time|date:"H" >= '12' and row.time|date:"H" < '18' %}
+              {% with had_any=true %}
               <div class="relative pl-14">
-                {% include "agendamentos/_agenda_card.html" with row=row %}
+                {% include "agendamentos/_agenda_slot.html" with row=row %}
               </div>
+              {% endwith %}
             {% endif %}
-          {% empty %}
-            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
           {% endfor %}
+          {% if not had_any %}
+            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+          {% endif %}
+          {% endwith %}
         </div>
       </div>
     </section>
 
-    <!-- ================== NOITE ================== -->
+    {# ================== NOITE ================== #}
     <section class="p-6">
-      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-        🌙 Noite
-      </h3>
+      <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">🌙 Noite</h3>
       <div class="relative">
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
         <div class="space-y-6">
+          {% with had_any=false %}
           {% for row in rows %}
-            {% if row.time.hour >= 18 %}
+            {% if row.time|date:"H" >= '18' %}
+              {% with had_any=true %}
               <div class="relative pl-14">
-                {% include "agendamentos/_agenda_card.html" with row=row %}
+                {% include "agendamentos/_agenda_slot.html" with row=row %}
               </div>
+              {% endwith %}
             {% endif %}
-          {% empty %}
-            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
           {% endfor %}
+          {% if not had_any %}
+            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+          {% endif %}
+          {% endwith %}
         </div>
       </div>
     </section>
+
   </div>
+  {% endif %}
 </div>
 {% endblock %}

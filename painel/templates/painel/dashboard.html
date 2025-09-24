@@ -49,14 +49,25 @@
             <span class="pill bg-slate-100 text-slate-700">📋 {{ agenda_hoje|length }} agendamentos</span>
           {% endif %}
           {% if solicitacoes_pendentes_count|default:0 > 0 %}
-            <a href="{% url 'painel:solicitacoes' %}" class="pill bg-amber-100 text-amber-800 hover:bg-amber-200">
-              🔔 Pendências: <strong>{{ solicitacoes_pendentes_count }}</strong>
-            </a>
+            {% if shop_slug %}
+              <a href="{% url 'solicitacoes:solicitacoes' shop_slug %}" class="pill bg-amber-100 text-amber-800 hover:bg-amber-200">
+                🔔 Pendências: <strong>{{ solicitacoes_pendentes_count }}</strong>
+              </a>
+            {% else %}
+              <span class="pill bg-slate-100 text-slate-500">🔔 Pendências: {{ solicitacoes_pendentes_count }}</span>
+            {% endif %}
           {% else %}
             <span class="pill bg-slate-100 text-slate-500">🔔 Pendências: 0</span>
           {% endif %}
-          <a href="{% url 'agendamentos:agenda_dia' %}" class="btn btn-primary ml-1">📅 Abrir agenda</a>
-          <a href="{% url 'agendamentos:minha_agenda_config' %}" class="btn btn-outline">🗓️ Minha agenda</a>
+
+          <!-- Aqui SÓ o agendamento precisa do shop_slug -->
+          {% if shop_slug %}
+            <a href="{% url 'agendamentos:agenda_dia' shop_slug %}" class="btn btn-primary ml-1">📅 Abrir agenda</a>
+            <a href="{% url 'agendamentos:minha_agenda_config' shop_slug %}" class="btn btn-outline">🗓️ Minha agenda</a>
+          {% else %}
+            <span class="btn btn-disabled ml-1 cursor-not-allowed opacity-50">📅 Abrir agenda</span>
+            <span class="btn btn-disabled cursor-not-allowed opacity-50">🗓️ Minha agenda</span>
+          {% endif %}
         </div>
       </div>
     </section>
