@@ -6,7 +6,6 @@
 {% block content %}
 <div class="mx-auto max-w-4xl px-4 py-6">
 
-  {# Mensagens de erro gerais #}
   {% if form.non_field_errors %}
   <div class="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-800 text-sm">
     {{ form.non_field_errors }}
@@ -19,7 +18,7 @@
   </div>
   {% endif %}
 
-  <form method="post" class="bg-white rounded-2xl border shadow-sm overflow-hidden">
+  <form method="post" class="bg-white rounded-2xl border shadow-sm overflow-hidden" novalidate>
     {% csrf_token %}
 
     <!-- Cabeçalho -->
@@ -27,35 +26,51 @@
       <span class="w-9 h-9 flex items-center justify-center rounded-xl bg-emerald-100">💈</span>
       <div>
         <h2 class="text-lg font-semibold text-slate-900">{{ title }}</h2>
-        <p class="text-sm text-slate-600">Selecione cliente, barbeiro, serviço e horário disponível.</p>
+        <p class="text-sm text-slate-600">Selecione serviço, cliente e um horário disponível.</p>
       </div>
     </div>
 
     <!-- Corpo -->
     <div class="px-6 py-6 space-y-8">
 
-      <!-- 1) Barbeiro / Data / Horário -->
       <section>
-        <h3 class="text-sm font-semibold text-slate-800 mb-4">1. Escolha barbeiro e data</h3>
+        <h3 class="text-sm font-semibold text-slate-800 mb-4">1. Barbeiro, data e horário</h3>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Barbeiro</label>
-            {{ form.barbeiro|add_class:"w-full rounded-xl border px-3 py-2" }}
+            <div class="w-full rounded-xl border px-3 py-2 bg-slate-50 flex items-center justify-between">
+              <span class="text-slate-800">
+                {{ request.user.get_full_name|default:request.user.username }}
+              </span>
+              <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Você</span>
+            </div>
+            {% if form.barbeiro %}{{ form.barbeiro.as_hidden }}{% endif %}
             {% if form.barbeiro.errors %}
               <p class="mt-1 text-sm text-rose-600">{{ form.barbeiro.errors|striptags }}</p>
             {% endif %}
           </div>
 
+
           <div>
             <label for="id_dia" class="block text-sm font-medium text-slate-700 mb-1">Data</label>
-            <input type="date" name="dia" id="id_dia" value="{{ dia|date:'Y-m-d' }}"
-                   class="w-full rounded-xl border px-3 py-2">
+            <input type="date"
+                   name="dia"
+                   id="id_dia"
+                   value="{{ dia|date:'Y-m-d' }}"
+                   class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                   required>
           </div>
 
+          {# Horário #}
           <div class="md:col-span-2">
             <label for="id_inicio" class="block text-sm font-medium text-slate-700 mb-1">Horário</label>
             {% with sel=sel_inicio %}
-              <select name="inicio" id="id_inicio" class="w-full rounded-xl border px-3 py-2" required>
+              <select name="inicio"
+                      id="id_inicio"
+                      class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900/10 {% if form.inicio.errors %}border-rose-400 ring-rose-200{% endif %}"
+                      required
+                      {% if not slots_disponiveis %}disabled aria-disabled="true"{% endif %}>
                 {% if slots_disponiveis %}
                   {% for slot in slots_disponiveis %}
                     {% if slot.available %}
@@ -67,7 +82,7 @@
                     {% endif %}
                   {% endfor %}
                 {% else %}
-                  <option disabled selected>⚠ Selecione um barbeiro e uma data com disponibilidade</option>
+                  <option disabled selected>⚠ Selecione uma data com disponibilidade</option>
                 {% endif %}
               </select>
             {% endwith %}
@@ -75,34 +90,33 @@
               <p class="mt-1 text-sm text-rose-600">{{ form.inicio.errors|striptags }}</p>
             {% endif %}
 
-            {% if not form.barbeiro.value %}
-              <p class="mt-1 text-xs text-rose-600">⚠ Selecione um barbeiro para ver horários.</p>
-            {% elif not dia %}
+            {% if not dia %}
               <p class="mt-1 text-xs text-rose-600">⚠ Selecione uma data para ver horários.</p>
-            {% elif not slots_disponiveis %}
-              <p class="mt-1 text-xs text-rose-600">⚠ Este barbeiro não tem disponibilidade configurada neste dia.</p>
+            {% elif slots_disponiveis|length == 0 %}
+              <p class="mt-1 text-xs text-rose-600">⚠ Não há disponibilidade configurada neste dia.</p>
             {% endif %}
           </div>
         </div>
       </section>
 
-      <!-- 2) Serviço -->
+
       <section>
-        <h3 class="text-sm font-semibold text-slate-800 mb-4">2. Escolha o serviço</h3>
+        <h3 class="text-sm font-semibold text-slate-800 mb-4">2. Serviço</h3>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Serviço</label>
-            {{ form.servico|add_class:"w-full rounded-xl border px-3 py-2" }}
+            {{ form.servico|add_class:"w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900/10"|attr:"aria-describedby:help_servico" }}
             {% if form.servico.errors %}
               <p class="mt-1 text-sm text-rose-600">{{ form.servico.errors|striptags }}</p>
             {% else %}
-              <p class="mt-1 text-xs text-slate-500">Preço e duração são sugeridos automaticamente.</p>
+              <p id="help_servico" class="mt-1 text-xs text-slate-500">Preço e duração podem ser sugeridos automaticamente.</p>
             {% endif %}
           </div>
 
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Preço cobrado</label>
-            {{ form.preco_cobrado|add_class:"w-full rounded-xl border px-3 py-2" }}
+            {{ form.preco_cobrado|add_class:"w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900/10"|attr:"inputmode:decimal" }}
             {% if form.preco_cobrado.errors %}
               <p class="mt-1 text-sm text-rose-600">{{ form.preco_cobrado.errors|striptags }}</p>
             {% endif %}
@@ -110,20 +124,20 @@
         </div>
       </section>
 
-      <!-- 3) Cliente -->
       <section>
-        <h3 class="text-sm font-semibold text-slate-800 mb-4">3. Dados do cliente</h3>
+        <h3 class="text-sm font-semibold text-slate-800 mb-4">3. Cliente</h3>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
-            {{ form.cliente|add_class:"w-full rounded-xl border px-3 py-2" }}
+            {{ form.cliente|add_class:"w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900/10" }}
             {% if form.cliente.errors %}
               <p class="mt-1 text-sm text-rose-600">{{ form.cliente.errors|striptags }}</p>
             {% endif %}
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Cliente nome</label>
-            {{ form.cliente_nome|add_class:"w-full rounded-xl border px-3 py-2" }}
+            <label class="block text-sm font-medium text-slate-700 mb-1">Cliente (nome livre)</label>
+            {{ form.cliente_nome|add_class:"w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900/10" }}
             {% if form.cliente_nome.errors %}
               <p class="mt-1 text-sm text-rose-600">{{ form.cliente_nome.errors|striptags }}</p>
             {% endif %}
@@ -131,20 +145,20 @@
         </div>
       </section>
 
-      <!-- 4) Finalização -->
       <section>
         <h3 class="text-sm font-semibold text-slate-800 mb-4">4. Finalização</h3>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
-            {{ form.status|add_class:"w-full rounded-xl border px-3 py-2" }}
+            {{ form.status|add_class:"w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900/10" }}
             {% if form.status.errors %}
               <p class="mt-1 text-sm text-rose-600">{{ form.status.errors|striptags }}</p>
             {% endif %}
           </div>
           <div class="md:col-span-2">
             <label class="block text-sm font-medium text-slate-700 mb-1">Observações</label>
-            {{ form.observacoes|add_class:"w-full rounded-xl border px-3 py-2 min-h-[96px]" }}
+            {{ form.observacoes|add_class:"w-full rounded-xl border px-3 py-2 min-h-[96px] focus:outline-none focus:ring-2 focus:ring-slate-900/10" }}
             {% if form.observacoes.errors %}
               <p class="mt-1 text-sm text-rose-600">{{ form.observacoes.errors|striptags }}</p>
             {% endif %}
@@ -152,51 +166,67 @@
         </div>
       </section>
 
-      {# DEBUG opcional #}
       {% if debug_info or form.errors %}
-        <section>
-          <h3 class="text-sm font-semibold text-slate-800 mb-2">[DEBUG]</h3>
+      <details class="rounded-xl border bg-slate-50">
+        <summary class="px-3 py-2 text-sm font-medium cursor-pointer">[DEBUG]</summary>
+        <div class="p-3 space-y-2">
           {% if debug_info %}
-            <pre class="text-xs whitespace-pre-wrap rounded-xl border bg-slate-50 px-3 py-2">{{ debug_info }}</pre>
+            <pre class="text-xs whitespace-pre-wrap rounded-lg border bg-white px-3 py-2">{{ debug_info }}</pre>
           {% endif %}
           {% if form.errors %}
-            <pre class="text-xs whitespace-pre-wrap rounded-xl border bg-rose-50 px-3 py-2 text-rose-800">
-errors: {{ form.errors }}
-non_field: {{ form.non_field_errors }}
+            <pre class="text-xs whitespace-pre-wrap rounded-lg border bg-rose-50 px-3 py-2 text-rose-800">
+              errors: {{ form.errors }}
+              non_field: {{ form.non_field_errors }}
             </pre>
           {% endif %}
-        </section>
+        </div>
+      </details>
       {% endif %}
     </div>
 
     <!-- Rodapé -->
     <div class="px-6 py-4 border-t bg-slate-50 flex justify-end gap-2">
-      <a href="{% url 'agendamentos:agenda_dia' shop.slug %}" class="px-4 py-2 rounded-xl border">Cancelar</a>
+      <a href="{% url 'agendamentos:agenda_dia' shop.slug %}" class="px-4 py-2 rounded-xl border hover:bg-slate-100">Cancelar</a>
       <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Salvar</button>
     </div>
   </form>
 </div>
 
-<!-- Script mínimo para preservar seleção ao trocar barbeiro/data -->
+{# ===================== JS ===================== #}
 <script>
 (function(){
-  const barbeiro   = document.getElementById("id_barbeiro");
-  const dia        = document.getElementById("id_dia");
-  const cliente    = document.getElementById("id_cliente");
-  const clienteNom = document.getElementById("id_cliente_nome");
-  const servico    = document.getElementById("id_servico");
-
+  // Recarrega a página preservando filtros quando mudar a data
+  const dia = document.getElementById("id_dia");
   function reloadWithParams(){
     const p = new URLSearchParams(window.location.search);
-    if (barbeiro && barbeiro.value) p.set("barbeiro", barbeiro.value);
-    if (dia && dia.value)           p.set("dia", dia.value);
-    if (cliente && cliente.value)   p.set("cliente", cliente.value);
+    if (dia && dia.value) p.set("dia", dia.value);
+    // Preserve também cliente/serviço (se o usuário já escolheu)
+    const cliente    = document.getElementById("id_cliente");
+    const clienteNom = document.getElementById("id_cliente_nome");
+    const servico    = document.getElementById("id_servico");
+    if (cliente && cliente.value)      p.set("cliente", cliente.value);
     if (clienteNom && clienteNom.value) p.set("cliente_nome", clienteNom.value);
-    if (servico && servico.value)   p.set("servico", servico.value);
+    if (servico && servico.value)      p.set("servico", servico.value);
     window.location.search = p.toString();
   }
-  if (barbeiro) barbeiro.addEventListener("change", reloadWithParams);
-  if (dia)      dia.addEventListener("change", reloadWithParams);
+  if (dia) dia.addEventListener("change", reloadWithParams);
+
+  // Se futuramente você renderizar <option data-preco="..."> no select de serviço,
+  // este trecho preenche o preço automaticamente.
+  const servico = document.getElementById("id_servico");
+  const preco   = document.getElementById("id_preco_cobrado");
+  if (servico && preco) {
+    servico.addEventListener("change", function(){
+      const opt = servico.options[servico.selectedIndex];
+      const p = opt ? opt.getAttribute("data-preco") : null;
+      if (p && !preco.value) { preco.value = p; }
+    });
+  }
+
+  // Foco inicial mais inteligente
+  const firstError = document.querySelector(".border-rose-400, .ring-rose-200");
+  if (firstError) firstError.focus?.();
+  else document.getElementById("id_servico")?.focus();
 })();
 </script>
 {% endblock %}

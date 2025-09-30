@@ -12,9 +12,9 @@
     <div class="font-semibold text-lg">📅 Semana: {{ wk_start|date:"d/M" }} — {{ wk_end|date:"d/M" }}</div>
     <div class="flex gap-2">
       <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
-         href="{% url 'agendamentos:agenda_semana' %}?data={{ prev_week|date:'Y-m-d' }}">← Semana anterior</a>
+         href="{% url 'agendamentos:agenda_semana' shop.slug %}?data={{ prev_week|date:'Y-m-d' }}">← Semana anterior</a>
       <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
-         href="{% url 'agendamentos:agenda_semana' %}?data={{ next_week|date:'Y-m-d' }}">Próxima semana →</a>
+         href="{% url 'agendamentos:agenda_semana' shop.slug %}?data={{ next_week|date:'Y-m-d' }}">Próxima semana →</a>
     </div>
   </div>
 
@@ -26,6 +26,7 @@
       <span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Folga</span>
       <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">Ocupado</span>
       <span class="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">Agendamento</span>
+      <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Conflito</span>
     </div>
   </div>
 
@@ -53,31 +54,44 @@
           {% for c in r.cells %}
             <div class="px-2 py-2 border-l border-gray-50">
               {% if c.item %}
-                <!-- Agendamento -->
-                <div class="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2 shadow-sm">
-                  <div class="text-[11px] text-gray-500">
-                    {{ c.item.inicio|date:"H:i" }}–{{ c.item.fim|date:"H:i" }}
+                {% with status_code=c.item.status|stringformat:"s"|upper %}
+                  <!-- Agendamento -->
+                  <div class="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2 shadow-sm">
+                    <div class="flex items-center justify-between gap-2">
+                      <div class="text-[11px] text-gray-500">
+                        {{ c.item.inicio|date:"H:i" }}–{{ c.item.fim|date:"H:i" }}
+                      </div>
+                      <span class="inline-block text-[11px] px-2 py-0.5 rounded-full
+                        {% if status_code in "CONFIRMADA CONFIRMADO" %}
+                          bg-emerald-100 text-emerald-700
+                        {% elif status_code == "PENDENTE" %}
+                          bg-amber-100 text-amber-700
+                        {% elif status_code in "NEGADA CANCELADA" %}
+                          bg-rose-100 text-rose-700
+                        {% else %}
+                          bg-gray-100 text-gray-700
+                        {% endif %}"
+                        title="Status: {{ c.item.status }}">
+                        {{ c.item.status }}
+                      </span>
+                    </div>
+
+                    <div class="text-sm font-medium truncate mt-1" title="{{ c.item.cliente_nome }}">{{ c.item.cliente_nome }}</div>
+                    <div class="text-xs text-gray-600 truncate" title="{{ c.item.servico_nome }}">{{ c.item.servico_nome }}</div>
+
+                    {% if c.conflicts and c.conflicts > 0 %}
+                      <div class="text-[11px] text-rose-700 mt-1">⚠️ +{{ c.conflicts }} conflito(s)</div>
+                    {% endif %}
+
+                    <div class="mt-2">
+                      <a href="{% url 'solicitacoes:detalhe' shop.slug c.item.id %}"  {# <= apenas ID, como no _agenda_card.html #}
+                         class="text-[11px] underline">Ver detalhes</a>
+                    </div>
                   </div>
-                  <div class="text-sm font-medium truncate">{{ c.item.cliente_nome }}</div>
-                  <div class="text-xs text-gray-600 truncate">{{ c.item.servico_nome }}</div>
-                  {% if c.conflicts and c.conflicts > 0 %}
-                    <div class="text-[11px] text-rose-700 mt-0.5">⚠️ +{{ c.conflicts }} conflito(s)</div>
-                  {% endif %}
-                  <span class="mt-1 inline-block text-[11px] px-2 py-0.5 rounded-full
-                    {% if c.item.status == 'CONFIRMADA' or c.item.status == 'CONFIRMADO' %} bg-emerald-100 text-emerald-700
-                    {% elif c.item.status == 'PENDENTE' %} bg-amber-100 text-amber-700
-                    {% elif c.item.status == 'NEGADA' or c.item.status == 'CANCELADA' %} bg-rose-100 text-rose-700
-                    {% else %} bg-gray-100 text-gray-700 {% endif %}">
-                    {{ c.item.status }}
-                  </span>
-                  <div class="mt-2">
-                    <a href="{% url 'solicitacoes:detalhe' c.item.id %}"
-                       class="text-[11px] underline">Ver detalhes</a>
-                  </div>
-                </div>
+                {% endwith %}
 
               {% elif c.occupied %}
-                <!-- Ocupado -->
+                <!-- Ocupado (dentro da janela de um agendamento) -->
                 <div class="rounded-lg border border-dashed border-gray-300 p-2 bg-gray-50 text-center text-gray-500">
                   Ocupado
                 </div>
@@ -94,12 +108,13 @@
                   </div>
                 {% else %}
                   <div class="rounded-lg border border-dashed border-emerald-200 p-2 bg-white text-center">
-                    <a href="{% url 'solicitacoes:solicitacoes' %}?inicio={{ c.time|date:'Y-m-d\\TH:i' }}"
+                    {# Igual ao _agenda_card.html: sem shop.slug. Se sua rota exigir slug, me diga o pattern que adapto. #}
+                    <a href="{% url 'solicitacoes:solicitacoes' shop.slug %}?inicio={{ c.time|date:'Y-m-d\\TH:i' }}"
                       class="block h-full w-full rounded-lg border border-dashed border-emerald-300 bg-white hover:bg-emerald-50 
-                              flex items-center justify-center text-[12px] font-medium text-emerald-700 transition">
+                              flex items-center justify-center text-[12px] font-medium text-emerald-700 transition"
+                      title="Agendar neste horário">
                       ➕ Livre · Agendar
                     </a>
-
                   </div>
                 {% endif %}
               {% endif %}

@@ -21,6 +21,8 @@ from agendamentos.models import Agendamento, StatusAgendamento
 from servicos.models import Servico
 from core import settings
 from .models import Solicitacao, SolicitacaoStatus
+from django.contrib.auth.decorators import login_required
+from django.http import Http404
 
 logger = logging.getLogger(__name__)
 
@@ -35,17 +37,21 @@ def _wants_json(request) -> bool:
     return xrw == "xmlhttprequest" or "application/json" in accept
 
 def _solicitacao_qs(shop):
-    return (
-        Solicitacao.objects
-        .select_related("shop", "cliente", "servico", "barbeiro")
-        .filter(shop=shop)
-    )
+    return (Solicitacao.objects
+            .filter(shop=shop)
+            .select_related("cliente", "servico"))
+
 
 def _parse_inicio(inicio_str: str):
     dt = parse_datetime((inicio_str or "").strip())
     if dt and timezone.is_naive(dt):
         dt = timezone.make_aware(dt, timezone.get_current_timezone())
     return dt
+
+def _agendamento_qs(shop):
+    return (Agendamento.objects
+            .filter(shop=shop)
+            .select_related("cliente", "servico", "barbeiro"))
 
 # ----------------- Aplica snapshots de serviço -----------------
 def _aplicar_snapshots_de_servico(s: Solicitacao, servico: Servico | None):
@@ -149,11 +155,39 @@ def solicitacoes(request, shop_slug):
 
 
 # ----------------- Detalhe/Editar -----------------
+@login_required
 def detalhe(request, shop_slug, pk):
+    """
+    Detalhe unificado:
+      - Tenta carregar Solicitacao(pk) na barbearia.
+      - Se não existir, tenta Agendamento(pk) na barbearia.
+      - Renderiza o mesmo template com 'tipo' no contexto.
+    """
     shop = _get_shop(request, shop_slug)
-    s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
+
+    s = _solicitacao_qs(shop).filter(pk=pk).first()
+    a = None
+    tipo = "solicitacao"
+
+    if not s:
+        a = _agendamento_qs(shop).filter(pk=pk).first()
+        if not a:
+            # 404 mais explícito que “No Solicitacao matches…”
+            raise Http404("Nenhuma Solicitação ou Agendamento encontrado para este ID nesta barbearia.")
+        tipo = "agendamento"
+
     servicos = Servico.objects.filter(ativo=True, shop=shop).order_by("nome")
-    return render(request, "solicitacoes/detalhe.html", {"shop": shop, "solicitacao": s, "servicos": servicos})
+
+    ctx = {
+        "shop": shop,
+        "servicos": servicos,
+        "tipo": tipo,
+        "obj": s or a,                # objeto atual (unificado)
+        "solicitacao": s,             # mantém compatibilidade com templates antigos
+        "agendamento": a,             # idem
+        "now": timezone.now(),        # útil para badges relativos
+    }
+    return render(request, "solicitacoes/detalhe.html", ctx)
 
 # -------- NOVO HELPER: resolve o barbeiro de acordo com o usuário logado --------
 def _resolve_barbeiro_para_agendamento(request, shop: BarberShop, solicitacao: Solicitacao):

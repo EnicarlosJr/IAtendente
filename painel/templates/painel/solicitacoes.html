@@ -103,7 +103,7 @@
 
           {# Status #}
           <td class="px-4 py-3 align-top" id="status-{{ s.id }}">
-            {% include "solicitacoes/partials/_status_badge.html" with s=s %}
+            {% include "solicitacoes/partials/_status_badge.html" with status=s.status label=s.status size="xs" only %}
           </td>
 
           {# Ações #}

@@ -12,9 +12,9 @@
     <div class="font-semibold">{{ ref_date|date:"F Y" }}</div>
     <div class="flex gap-2">
       <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
-         href="{% url 'agendamentos:agenda_mes' %}?data={{ prev_month|date:'Y-m-d' }}">← Anterior</a>
+         href="{% url 'agendamentos:agenda_mes' shop.slug %}?data={{ prev_month|date:'Y-m-d' }}">← Anterior</a>
       <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
-         href="{% url 'agendamentos:agenda_mes' %}?data={{ next_month|date:'Y-m-d' }}">Próximo →</a>
+         href="{% url 'agendamentos:agenda_mes' shop.slug %}?data={{ next_month|date:'Y-m-d' }}">Próximo →</a>
     </div>
   </div>
 
@@ -37,7 +37,7 @@
       <div class="bg-white min-h-[110px] p-2">
         <div class="flex items-center justify-between">
           <div class="text-xs text-gray-500">
-            <a href="{% url 'agendamentos:agenda_dia' %}?dia={{ dia|date:'Y-m-d' }}"
+            <a href="{% url 'agendamentos:agenda_dia' shop.slug %}?dia={{ dia|date:'Y-m-d' }}"
                class="hover:underline">{{ dia|date:"d" }}</a>
           </div>
           {% if items %}

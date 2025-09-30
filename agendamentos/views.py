@@ -193,6 +193,7 @@ def agenda_dia(request, shop_slug):
 
     ctx = {
         "title": "Agenda",
+        "view": "dia",
         "date": d,
         "prev_day": prev_day,
         "next_day": next_day,
@@ -216,6 +217,7 @@ def agenda_semana(request, shop_slug):
     hoje = timezone.localdate()
     base = _parse_date(request.GET.get("data", ""), hoje)
     wk_start, wk_end = _week_bounds(base)
+    barbeiro = request.user
 
     # resolve barbeiro alvo
     barbeiro = None
@@ -279,12 +281,16 @@ def agenda_semana(request, shop_slug):
     query_start = week_start_dt - timedelta(hours=6)
     week_end_dt = week_start_dt + timedelta(days=7)
 
-    qs = Agendamento.objects.filter(
-        shop=shop,
-        status=StatusAgendamento.CONFIRMADO,
-        inicio__lt=week_end_dt,
-        inicio__gte=query_start,
-    ).select_related("cliente", "servico")
+    qs = (Agendamento.objects
+        .filter(
+            shop=shop,
+            status=StatusAgendamento.CONFIRMADO,
+            inicio__lt=week_end_dt,
+            inicio__gte=query_start,
+        )
+        .select_related("cliente", "servico")
+        .filter(barbeiro=barbeiro))   # <- aqui é filter
+    # filtra por barbeiro, se houver
     if barbeiro:
         qs = qs.filter(barbeiro=barbeiro)
     confirmadas = list(qs.order_by("inicio"))
@@ -336,6 +342,7 @@ def agenda_semana(request, shop_slug):
 
     ctx = {
         "title": "Agenda — Semana",
+        "view": "semana",
         "wk_start": wk_start,
         "wk_end": wk_end,
         "days_ctx": days_ctx,
@@ -380,6 +387,7 @@ def agenda_mes(request, shop_slug):
     ag_qs = (
         Agendamento.objects.filter(
             shop=shop,
+            barbeiro=request.user,
             status=StatusAgendamento.CONFIRMADO,
             inicio__gte=start_dt,
             inicio__lt=end_dt,
@@ -548,65 +556,60 @@ def minha_agenda_config(request, shop_slug):
 def agendamento_novo(request, shop_slug, solicitacao_id=None):
     """
     Cria um agendamento **confirmado** (independente de Solicitação).
-    Se vier de uma Solicitação confirmada, você pode passar params via GET.
+    Sempre restrito ao barbeiro LOGADO e à barbearia (shop_slug) da URL.
     """
     shop = get_object_or_404(BarberShop, slug=shop_slug)
-    User = get_user_model()
 
     # --------- parâmetros GET ----------
-    barbeiro_id = (request.GET.get("barbeiro") or "").strip()
-    dia_param   = (request.GET.get("dia") or "").strip()
-    cliente_id  = (request.GET.get("cliente") or "").strip()
-    cliente_nome_param = (request.GET.get("cliente_nome") or "").strip()
-    servico_id  = (request.GET.get("servico") or "").strip()
-    want_debug  = (request.GET.get("debug") == "1")
+    dia_param           = (request.GET.get("dia") or "").strip()
+    cliente_id          = (request.GET.get("cliente") or "").strip()
+    cliente_nome_param  = (request.GET.get("cliente_nome") or "").strip()
+    servico_id          = (request.GET.get("servico") or "").strip()
+    want_debug          = (request.GET.get("debug") == "1")
 
     dia = _parse_date(dia_param, timezone.localdate())
 
-    barbeiro = None
-    if barbeiro_id and barbeiro_id.isdigit():
-        try:
-            barbeiro = User.objects.get(pk=int(barbeiro_id))
-        except User.DoesNotExist:
-            barbeiro = None
+    # Barbeiro SEMPRE o usuário logado
+    barbeiro = request.user
 
     # --------- slots disponíveis ----------
     slots_disponiveis = []
     debug_lines = []
-    if barbeiro:
-        rule = Availability.objects.filter(barbeiro=barbeiro, weekday=dia.weekday()).first()
-        if rule:
-            slots_disponiveis = [s for s in rule.gerar_slots(dia, barbeiro) if s.get("available")]
-            if want_debug:
-                offs_count = TimeOff.objects.filter(barbeiro=barbeiro, start__date=dia).count()
-                ags_count  = Agendamento.objects.filter(barbeiro=barbeiro, inicio__date=dia).count()
-                debug_lines += [
-                    f"Dia: {dia.isoformat()}",
-                    f"Barbeiro: {barbeiro} (id={barbeiro.pk})",
-                    f"Regra: slot {rule.slot_minutes} min | {rule.start_time}–{rule.end_time}",
-                    f"Folgas no dia: {offs_count}",
-                    f"Agendamentos no dia: {ags_count}",
-                    f"Slots livres: {len(slots_disponiveis)}",
-                ]
-        elif want_debug:
+    rule = Availability.objects.filter(barbeiro=barbeiro, weekday=dia.weekday()).first()
+    if rule:
+        # Apenas slots marcados como available
+        slots_disponiveis = [s for s in rule.gerar_slots(dia, barbeiro) if s.get("available")]
+        if want_debug:
+            offs_count = TimeOff.objects.filter(barbeiro=barbeiro, start__date=dia).count()
+            ags_count  = Agendamento.objects.filter(shop=shop, barbeiro=barbeiro, inicio__date=dia).count()
             debug_lines += [
                 f"Dia: {dia.isoformat()}",
                 f"Barbeiro: {barbeiro} (id={barbeiro.pk})",
-                "Regra: nenhuma",
-                "Slots livres: 0",
+                f"Regra: slot {rule.slot_minutes} min | {rule.start_time}–{rule.end_time}",
+                f"Folgas no dia: {offs_count}",
+                f"Agendamentos no dia (shop={shop.slug}): {ags_count}",
+                f"Slots livres: {len(slots_disponiveis)}",
             ]
     elif want_debug:
-        debug_lines += ["Barbeiro: None", f"Dia: {dia.isoformat()}"]
+        debug_lines += [
+            f"Dia: {dia.isoformat()}",
+            f"Barbeiro: {barbeiro} (id={barbeiro.pk})",
+            "Regra: nenhuma",
+            "Slots livres: 0",
+        ]
 
     debug_info = "\n".join(debug_lines) if want_debug else ""
 
-    # Horário selecionado
+    # Horário selecionado (pode vir via GET ao clicar em um slot)
     sel_inicio = request.POST.get("inicio") or request.GET.get("inicio") or ""
 
     # --------- montar form ----------
-    initial = {"status": StatusAgendamento.CONFIRMADO}
-    if barbeiro:
-        initial["barbeiro"] = barbeiro.pk
+    initial = {
+        "status": StatusAgendamento.CONFIRMADO,
+        "barbeiro": barbeiro.pk,        # força barbeiro do logado
+    }
+    if sel_inicio:
+        initial["inicio"] = sel_inicio  # ajuda a pré-popular no form
     if cliente_id and cliente_id.isdigit():
         initial["cliente"] = int(cliente_id)
     if cliente_nome_param:
@@ -619,9 +622,8 @@ def agendamento_novo(request, shop_slug, solicitacao_id=None):
         if form.is_valid():
             ag = form.save(commit=False)
             ag.shop = shop
-
-            # por definição do Plano B, Agendamento é CONFIRMADO
-            ag.status = StatusAgendamento.CONFIRMADO
+            ag.barbeiro = barbeiro                         # força barbeiro do logado
+            ag.status = StatusAgendamento.CONFIRMADO       # confirmado por definição
 
             # snapshots
             if ag.servico and not ag.servico_nome:
@@ -633,9 +635,9 @@ def agendamento_novo(request, shop_slug, solicitacao_id=None):
             if not ag.fim:
                 ag.calcular_fim_pelo_servico()
 
-            # conflito
-            if ag.barbeiro_id and ag.inicio and ag.fim:
-                if Agendamento.existe_conflito(ag.barbeiro, ag.inicio, ag.fim):
+            # conflito (para o barbeiro logado)
+            if ag.inicio and ag.fim:
+                if Agendamento.existe_conflito(barbeiro, ag.inicio, ag.fim):
                     form.add_error(None, "Conflito de horário para este barbeiro.")
 
             if not form.errors:
@@ -653,11 +655,14 @@ def agendamento_novo(request, shop_slug, solicitacao_id=None):
         except Exception:
             pass
 
-    # reconstruir URL ao trocar barbeiro/data
+    # reconstruir URL ao trocar dados (preserva alguns params úteis)
     preserve_params = {}
-    if cliente_id: preserve_params["cliente"] = cliente_id
-    if cliente_nome_param: preserve_params["cliente_nome"] = cliente_nome_param
-    if servico_id: preserve_params["servico"] = servico_id
+    if cliente_id:
+        preserve_params["cliente"] = cliente_id
+    if cliente_nome_param:
+        preserve_params["cliente_nome"] = cliente_nome_param
+    if servico_id:
+        preserve_params["servico"] = servico_id
 
     ctx = {
         "title": "Novo atendimento",

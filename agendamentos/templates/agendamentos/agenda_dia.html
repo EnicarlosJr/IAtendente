@@ -15,9 +15,9 @@
     </h2>
     <div class="flex gap-2">
       <a class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-sm"
-         href="{% url 'agendamentos:agenda_dia' %}?dia={{ prev_day|date:'Y-m-d' }}">← Anterior</a>
+         href="{% url 'agendamentos:agenda_dia' shop.slug %}?dia={{ prev_day|date:'Y-m-d' }}">← Anterior</a>
       <a class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-sm"
-         href="{% url 'agendamentos:agenda_dia' %}?dia={{ next_day|date:'Y-m-d' }}">Próximo →</a>
+         href="{% url 'agendamentos:agenda_dia' shop.slug %}?dia={{ next_day|date:'Y-m-d' }}">Próximo →</a>
     </div>
   </div>
 
@@ -35,18 +35,18 @@
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
         <div class="space-y-6">
           {% with had_any=false %}
-          {% for row in rows %}
-            {% if row.time|date:"H" < '12' %}
-              {% with had_any=true %}
-              <div class="relative pl-14">
-                {% include "agendamentos/_agenda_slot.html" with row=row %}
-              </div>
-              {% endwith %}
+            {% for row in rows %}
+              {% if row.time|date:"H" < '12' %}
+                {% with had_any=true %}
+                  <div class="relative pl-14">
+                    {% include "agendamentos/_agenda_card.html" with row=row %}
+                  </div>
+                {% endwith %}
+              {% endif %}
+            {% endfor %}
+            {% if not had_any %}
+              <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
             {% endif %}
-          {% endfor %}
-          {% if not had_any %}
-            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
-          {% endif %}
           {% endwith %}
         </div>
       </div>
@@ -59,18 +59,18 @@
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
         <div class="space-y-6">
           {% with had_any=false %}
-          {% for row in rows %}
-            {% if row.time|date:"H" >= '12' and row.time|date:"H" < '18' %}
-              {% with had_any=true %}
-              <div class="relative pl-14">
-                {% include "agendamentos/_agenda_slot.html" with row=row %}
-              </div>
-              {% endwith %}
+            {% for row in rows %}
+              {% if row.time|date:"H" >= '12' and row.time|date:"H" < '18' %}
+                {% with had_any=true %}
+                  <div class="relative pl-14">
+                    {% include "agendamentos/_agenda_card.html" with row=row %}
+                  </div>
+                {% endwith %}
+              {% endif %}
+            {% endfor %}
+            {% if not had_any %}
+              <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
             {% endif %}
-          {% endfor %}
-          {% if not had_any %}
-            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
-          {% endif %}
           {% endwith %}
         </div>
       </div>
@@ -83,18 +83,18 @@
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
         <div class="space-y-6">
           {% with had_any=false %}
-          {% for row in rows %}
-            {% if row.time|date:"H" >= '18' %}
-              {% with had_any=true %}
-              <div class="relative pl-14">
-                {% include "agendamentos/_agenda_slot.html" with row=row %}
-              </div>
-              {% endwith %}
+            {% for row in rows %}
+              {% if row.time|date:"H" >= '18' %}
+                {% with had_any=true %}
+                  <div class="relative pl-14">
+                    {% include "agendamentos/_agenda_card.html" with row=row %}
+                  </div>
+                {% endwith %}
+              {% endif %}
+            {% endfor %}
+            {% if not had_any %}
+              <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
             {% endif %}
-          {% endfor %}
-          {% if not had_any %}
-            <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
-          {% endif %}
           {% endwith %}
         </div>
       </div>
