@@ -8,11 +8,42 @@
   <meta name="theme-color" content="#0ea5e9" />
   <title>{% block title %}IAtendente{% endblock %}</title>
 
+  <script>
+    (function () {
+      const KEY = 'theme';
+      const saved = localStorage.getItem(KEY); // 'dark' | 'light' | null
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = saved || (prefersDark ? 'dark' : 'light');
+
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0b1020');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#0ea5e9');
+      }
+    })();
+  </script>
+
+
+  {# Ordem correta: Tailwind -> base do tema -> estilos com prefixo ia- #}
   <link rel="stylesheet" href="{% static 'build/tailwind.css' %}">
+  <link rel="stylesheet" href="{% static '/painel/base-crm.css' %}">
+  <link rel="stylesheet" href="{% static '/painel/ia.css' %}">
+  <link rel="stylesheet" href="{% static '/painel/styles.css' %}">
+
+
+
   {% block head_extra %}{% endblock %}
 </head>
 
 <body class="min-h-full bg-gradient-to-b from-slate-50 to-slate-100 text-slate-900">
+
+  {# shop_slug seguro (pega de shop ou de request.shop) #}
+  {% firstof shop.slug request.shop.slug "" as shop_slug %}
+
+  <!-- dentro do header/topbar, ao lado dos atalhos -->
+
 
   <!-- Toggle do drawer mobile -->
   <input id="sidebar-toggle" type="checkbox" class="peer hidden" />
@@ -20,26 +51,27 @@
   <div class="min-h-screen flex">
 
     <!-- SIDEBAR -->
-    <aside class="fixed lg:static inset-y-0 left-0 z-40 w-72
-             -translate-x-full peer-checked:translate-x-0 lg:translate-x-0
-             transition-transform duration-200 bg-white border-r border-gray-200 shadow-sm
-             flex flex-col">
+    <aside class="ia-sidebar fixed lg:static inset-y-0 left-0 z-40 w-72
+                  -translate-x-full peer-checked:translate-x-0 lg:translate-x-0
+                  transition-transform duration-200 bg-white border-r border-gray-200 shadow-sm
+                  flex flex-col">
       <div class="flex-1 overflow-y-auto">
         {% include "painel/_sidebar.html" %}
       </div>
       <div class="px-4 py-3 border-t text-xs text-slate-500">
-        © {{ now|default_if_none:""|date:"Y" }} IAtendente
+        © {% now "Y" %} IAtendente
       </div>
     </aside>
 
     <!-- OVERLAY (mobile) -->
-    <label for="sidebar-toggle" class="fixed inset-0 z-30 bg-black/40 lg:hidden hidden peer-checked:block"></label>
+    <label for="sidebar-toggle" class="fixed inset-0 z-30 bg-black/40 lg:hidden pointer-events-none opacity-0
+             peer-checked:pointer-events-auto peer-checked:opacity-100 transition"></label>
 
     <!-- CONTEÚDO -->
     <main class="flex-1 min-w-0 flex flex-col">
 
       <!-- TOPBAR -->
-      <header class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-4">
+      <header class="ia-topbar h-14 bg-white border-b border-gray-200 flex items-center justify-between px-3 sm:px-4">
         <div class="flex items-center gap-2">
           <!-- Botão do drawer (mobile) -->
           <label for="sidebar-toggle"
@@ -53,8 +85,41 @@
           <h1 class="font-semibold text-slate-800 truncate">
             {% block header %}{{ title|default:"" }}{% endblock %}
           </h1>
-        </div>
 
+          {# Atalhos de gestão (apenas OWNER/MANAGER) #}
+          {% if shop_slug %}
+          {% if is_manager %}
+          <a href="{% url 'barbearias:usuarios' shop_slug %}"
+            class="ml-2 hidden sm:inline-flex items-center gap-2 rounded-md border bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-sm"
+            title="Gerenciar usuários">
+            👥 <span class="hidden md:inline">Usuários</span>
+          </a>
+          <a href="{% url 'barbearias:fluxo' shop_slug %}"
+            class="ml-2 hidden sm:inline-flex items-center gap-2 rounded-md border bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-sm"
+            title="Fluxo de pessoas">
+            📈 <span class="hidden md:inline">Fluxo</span>
+          </a>
+          {% else %}
+          {# fallback caso não use context processor 'is_manager' #}
+          {% if request.membership_role == "OWNER" or request.membership_role == "MANAGER" %}
+          <a href="{% url 'barbearias:usuarios' shop_slug %}"
+            class="ml-2 hidden sm:inline-flex items-center gap-2 rounded-md border bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-sm">
+            👥 <span class="hidden md:inline">Usuários</span>
+          </a>
+          <a href="{% url 'barbearias:fluxo' shop_slug %}"
+            class="ml-2 hidden sm:inline-flex items-center gap-2 rounded-md border bg-white text-slate-700 hover:bg-slate-50 px-3 py-1.5 text-sm">
+            📈 <span class="hidden md:inline">Fluxo</span>
+          </a>
+          {% endif %}
+          {% endif %}
+          {% endif %}
+        </div>
+      <button id="theme-toggle" class="btn btn-outline ml-2" type="button" aria-label="Alternar tema"
+        title="Alternar tema">
+        <span class="theme-icon-sun">☀️</span>
+        <span class="theme-icon-moon">🌙</span>
+        <span class="text-sm hidden sm:inline ml-1">Tema</span>
+      </button>
         <!-- Perfil / Avatar na Topbar -->
         {% if request.user.is_authenticated %}
         <details class="relative group">
@@ -67,17 +132,37 @@
               {{ request.user.get_full_name|default:request.user.username }}
             </span>
           </summary>
-          <div class="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-md z-50 text-sm">
+          <div class="absolute right-0 mt-2 w-56 rounded-md border border-gray-200 bg-white shadow-md z-50 text-sm">
             <div class="px-3 py-2 border-b border-gray-100">
               <div class="font-medium truncate">{{ request.user.get_full_name|default:request.user.username }}</div>
               <div class="text-xs text-gray-500 truncate">{{ request.user.email|default:"" }}</div>
             </div>
-            <a href="{% url 'password_change' %}" class="block px-3 py-2 hover:bg-slate-50">Alterar senha</a>
-            <a href="{% url 'logout' %}" class="block px-3 py-2 text-red-600 hover:bg-red-50">Sair</a>
+
+            {# Links de gestão no menu do avatar #}
+            {% if shop_slug %}
+            {% if is_manager %}
+            <a href="{% url 'barbearias:usuarios' shop_slug %}" class="block px-3 py-2 hover:bg-slate-50">Usuários</a>
+            <a href="{% url 'barbearias:fluxo' shop_slug %}" class="block px-3 py-2 hover:bg-slate-50">Fluxo de
+              pessoas</a>
+            {% else %}
+            {% if request.membership_role == "OWNER" or request.membership_role == "MANAGER" %}
+            <a href="{% url 'barbearias:usuarios' shop_slug %}" class="block px-3 py-2 hover:bg-slate-50">Usuários</a>
+            <a href="{% url 'barbearias:fluxo' shop_slug %}" class="block px-3 py-2 hover:bg-slate-50">Fluxo de
+              pessoas</a>
+            {% endif %}
+            {% endif %}
+            {% endif %}
+
+            <a href="{% url 'barb_auth:password_change' %}" class="block px-3 py-2 hover:bg-slate-50">Alterar senha</a>
+            <form method="post" action="{% url 'barb_auth:logout' %}">
+              {% csrf_token %}
+              <button class="block w-full text-left px-3 py-2 text-red-600 hover:bg-red-50">Sair</button>
+            </form>
           </div>
         </details>
         {% else %}
-        <a href="{% url 'login' %}" class="px-3 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700">
+        <a href="{% url 'barb_auth:login' %}"
+          class="px-3 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700">
           Entrar
         </a>
         {% endif %}
@@ -90,10 +175,10 @@
           {% for m in messages %}
           {% with lvl=m.tags|default:'info' %}
           <div role="alert" class="rounded-lg px-3 py-2 text-sm
-                            {% if 'success' in lvl %}bg-emerald-50 text-emerald-800 border border-emerald-200
-                            {% elif 'error' in lvl %}  bg-rose-50 text-rose-800 border border-rose-200
-                            {% elif 'warning' in lvl %}bg-amber-50 text-amber-800 border border-amber-200
-                            {% else %}                 bg-slate-50 text-slate-800 border border-slate-200{% endif %}">
+               {% if 'success' in lvl %}bg-emerald-50 text-emerald-800 border border-emerald-200
+               {% elif 'error' in lvl %}  bg-rose-50 text-rose-800 border border-rose-200
+               {% elif 'warning' in lvl %}bg-amber-50 text-amber-800 border border-amber-200
+               {% else %}                 bg-slate-50 text-slate-800 border border-slate-200{% endif %}">
             {{ m }}
           </div>
           {% endwith %}
@@ -161,27 +246,33 @@
 
   <!-- Scripts -->
   <script>
-    // Fecha o drawer ao clicar em qualquer link dentro do sidebar (no mobile)
+    // Fecha o drawer ao clicar em links (no mobile)
     (function () {
       const cb = document.getElementById('sidebar-toggle');
       const aside = document.querySelector('aside');
       if (!cb || !aside) return;
       aside.addEventListener('click', (e) => {
         const a = e.target.closest('a');
-        if (a && window.getComputedStyle(document.querySelector('label[for="sidebar-toggle"]')).display !== 'none') {
+        const drawerBtn = document.querySelector('label[for="sidebar-toggle"]');
+        if (a && drawerBtn && window.getComputedStyle(drawerBtn).display !== 'none') {
           cb.checked = false;
         }
       });
     })();
 
-    // Auto-esconde apenas mensagens (não os cards da agenda!)
+    // Auto-esconde apenas mensagens
     setTimeout(() => {
       document.querySelectorAll('[role="alert"]').forEach(el => {
         el.classList.add('opacity-0', 'transition', 'duration-500');
-        setTimeout(() => el.remove(), 1000); // remove do DOM após animar
+        setTimeout(() => el.remove(), 1000);
       });
     }, 3000);
   </script>
+
+  {# Ações de solicitações (confirmar/recusar/finalizar/no-show) #}
+  <script src="{% static 'js/solicitacoes.js' %}" defer></script>
+  <script src="{% static 'js/tainwind_config.js' %}" defer></script>
+
   {% block scripts %}{% endblock %}
 </body>
 

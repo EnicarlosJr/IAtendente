@@ -1,0 +1,15 @@
+<!-- barbearias/templates/barbearias/logout_confirm.html -->
+{% extends "painel/base_minimal.html" %}
+{% block title %}Sair · IAtendente{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-sm mt-16 bg-white border rounded-2xl p-6 shadow-sm">
+  <h1 class="text-lg font-semibold mb-4">Tem certeza que deseja sair?</h1>
+  <form method="post">
+    {% csrf_token %}
+    <div class="flex gap-2">
+      <a href="{% url 'painel:dashboard' %}" class="px-3 py-2 rounded border">Cancelar</a>
+      <button class="px-3 py-2 rounded bg-rose-600 text-white">Sair</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

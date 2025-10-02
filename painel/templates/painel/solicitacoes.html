@@ -1,218 +1,173 @@
 {% extends "painel/base.html" %}
 {% load static %}
-{% block title %}{{ title|default:"Solicitações" }}{% endblock %}
+{% block title %}Solicitações{% endblock %}
 
 {% block content %}
 <div class="mx-auto max-w-7xl px-4 py-6">
 
   {# =================== RESUMO / ALERTAS =================== #}
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-      <h2 class="text-sm font-semibold text-gray-800 mb-2">Alertas</h2>
+    <section class="card p-4">
+      <h2 class="section-title mb-3">📊 Alertas</h2>
       <ul class="text-sm space-y-2">
-        <li>🔔 {{ alertas.sem_confirmacao|default:0 }} clientes sem confirmação</li>
-        <li>⏱️ {{ alertas.inativos_30d|default:0 }} clientes inativos há +30 dias</li>
-        <li>📅 {{ alertas.solicitacoes_pendentes|default:0 }} solicitações pendentes</li>
+        <li>🔔 <span class="font-semibold text-rose-600">{{ alertas.sem_confirmacao|default:0 }}</span> aguardando confirmação</li>
+        <li>📅 <span class="font-semibold text-indigo-600">{{ alertas.solicitacoes_pendentes|default:0 }}</span> solicitações pendentes</li>
       </ul>
     </section>
 
-    {# =================== FILTROS + AÇÃO GLOBAL =================== #}
-    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:col-span-2">
+    <section class="card p-4 md:col-span-2">
       <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <h1 class="text-lg font-semibold">Solicitações</h1>
-
-        <a href="{% url 'agendamentos:agendamento_novo' shop.slug %}"
-           class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 text-white px-4 py-2 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-          <span aria-hidden="true">➕</span>
-          <span>Adicionar atendimento</span>
-        </a>
+        {% if shop %}
+          <a href="{% url 'agendamentos:agendamento_novo' shop.slug %}" class="btn btn-primary">➕ Novo atendimento</a>
+        {% else %}
+          <button class="btn btn-secondary opacity-60 cursor-not-allowed" disabled>➕ Novo atendimento</button>
+        {% endif %}
       </div>
 
-      <form method="get" class="mt-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 w-full max-w-4xl">
+      {# ---- Filtros ---- #}
+      <form method="get" class="mt-4 form-row sm:grid-cols-[1fr_auto_auto] max-w-4xl">
         <input type="text" name="q" value="{{ filters.q|default_if_none:'' }}"
-               class="w-full rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300"
-               placeholder="Buscar por nome ou telefone" aria-label="Buscar por nome ou telefone">
+               class="ia-input input--ghost"
+               placeholder="Buscar por nome ou telefone">
 
-        {# filtro de status via partial #}
-        {% include "solicitacoes/partials/_status_filter.html" with filters=filters %}
+        {# status compatível com a view #}
+        {% with st=filters.status|default:'' %}
+        <select name="status" class="ia-input input--ghost w-full sm:w-auto"
+                onchange="this.form.requestSubmit()">
+          <option value=""           {% if st == "" %}selected{% endif %}>Todos</option>
+          <option value="PENDENTE"   {% if st == "PENDENTE" %}selected{% endif %}>Pendente</option>
+          <option value="CONFIRMADA" {% if st == "CONFIRMADA" %}selected{% endif %}>Confirmada (ag.)</option>
+          <option value="FINALIZADA" {% if st == "FINALIZADA" %}selected{% endif %}>Finalizada (ag.)</option>
+          <option value="REALIZADA"  {% if st == "REALIZADA" %}selected{% endif %}>Realizada (ag.)</option>
+          <option value="NO_SHOW"    {% if st == "NO_SHOW" %}selected{% endif %}>No-show (ag.)</option>
+          <option value="CANCELADA"  {% if st == "CANCELADA" %}selected{% endif %}>Cancelada/Negada (ag.)</option>
+        </select>
+        {% endwith %}
 
-        <button class="rounded-xl px-4 py-2 bg-black text-white hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-black/40">Filtrar</button>
-
-        <a href="{% url 'solicitacoes:solicitacoes' shop.slug %}"
-           class="rounded-xl px-4 py-2 border hover:bg-gray-50 text-center focus:outline-none focus:ring-2 focus:ring-slate-300">Limpar</a>
+        <button class="btn btn-secondary">Filtrar</button>
       </form>
     </section>
   </div>
 
-  {# =================== TABELA =================== #}
-  <div class="overflow-x-auto rounded-2xl border bg-white">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50 text-left sticky top-0 z-10">
+  {# =================== LISTAGEM =================== #}
+  <div class="ia-table-wrap">
+    <table class="ia-table text-sm">
+      <thead>
         <tr>
-          <th class="px-4 py-3 font-semibold text-gray-700">Criado</th>
-          <th class="px-4 py-3 font-semibold text-gray-700">Cliente</th>
-          <th class="px-4 py-3 font-semibold text-gray-700">Serviço</th>
-          <th class="px-4 py-3 font-semibold text-gray-700">Início</th>
-          <th class="px-4 py-3 font-semibold text-gray-700">Status</th>
-          <th class="px-4 py-3 font-semibold text-right text-gray-700">Ações</th>
+          <th>Data/Hora</th>
+          <th>Cliente</th>
+          <th class="hidden md:table-cell">Serviço</th>
+          <th>Status</th>
+          <th class="text-right">Ações</th>
         </tr>
       </thead>
 
-      <tbody class="divide-y" id="rows">
-        {% for s in solicitacoes %}
-        <tr id="row-{{ s.id }}" class="hover:bg-gray-50">
+      <tbody id="rows">
+        {# --------- MODO: SOLICITAÇÕES --------- #}
+        {% if list_kind == "solicitacoes" %}
+          {% for s in page_obj %}
+          <tr id="row-{{ s.id }}" class="transition {% if s.status|stringformat:'s'|upper == 'PENDENTE' %}bg-amber-50{% endif %}">
+            <td class="align-top">
+              <div class="font-medium">
+                {% if s.inicio %}{{ s.inicio|date:"d/m H:i" }}{% else %}<span class="ia-text-muted italic">A definir</span>{% endif %}
+              </div>
+            </td>
+            <td class="align-top">
+              <div class="font-medium truncate max-w-[220px]" title="{% firstof s.nome s.cliente_nome s.cliente.nome s.telefone '—' %}">
+                {% firstof s.nome s.cliente_nome s.cliente.nome "—" %}
+              </div>
+              <div class="ia-text-muted text-xs">{% firstof s.telefone s.cliente.telefone "—" %}</div>
+            </td>
+            <td class="align-top hidden md:table-cell">
+              <div class="truncate max-w-[240px]">{% firstof s.servico_label s.servico_nome s.servico.nome "—" %}</div>
+            </td>
+            <td class="align-top" id="status-{{ s.id }}">
+              {% include "solicitacoes/partials/_status_badge.html" with status=s.status label=s.status size="xs" only %}
+            </td>
+            <td class="align-top text-right" id="actions-{{ s.id }}">
+              <div class="row-actions flex justify-end gap-2">
+                {% if shop %}
+                  <button type="button" class="btn btn-primary"
+                          data-confirm-url="{% url 'solicitacoes:confirmar' shop.slug s.id %}"
+                          onclick="openConfirm(this)">✅ Confirmar</button>
+                  <button type="button" class="btn btn-danger"
+                          data-deny-url="{% url 'solicitacoes:recusar' shop.slug s.id %}"
+                          onclick="openDeny(this)">❌ Negar</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="px-4 py-10 text-center ia-text-muted">Nenhuma solicitação encontrada.</td></tr>
+          {% endfor %}
+        {% endif %}
 
-          {# Criado #}
-          <td class="px-4 py-3 align-top">
-            <div class="font-medium">
-              {{ s.criado_em|date:"d/m/Y H:i" }}
-            </div>
-            {% if s.id_externo %}
-              <div class="text-gray-500 text-xs">#{{ s.id_externo }}</div>
-            {% endif %}
-          </td>
-
-          {# Cliente #}
-          <td class="px-4 py-3 align-top">
-            <div class="font-medium truncate max-w-[220px]">
-              {% firstof s.nome s.cliente_nome s.cliente.nome "—" %}
-            </div>
-            <div class="text-gray-500 truncate max-w-[220px]">
-              {% firstof s.telefone s.cliente.telefone "—" %}
-            </div>
-          </td>
-
-          {# Serviço #}
-          <td class="px-4 py-3 align-top">
-            <div class="truncate max-w-[240px]">
-              {% firstof s.servico_label s.servico_nome s.servico.nome "—" %}
-            </div>
-            {% if s.servico and s.servico.duracao_min %}
-              <div class="text-xs text-gray-500 mt-0.5">({{ s.servico.duracao_min }} min)</div>
-            {% endif %}
-          </td>
-
-          {# Início #}
-          <td class="px-4 py-3 align-top">
-            {% if s.inicio %}
-              {{ s.inicio|date:"d/m/Y H:i" }}
-            {% else %}
-              —
-            {% endif %}
-          </td>
-
-          {# Status #}
-          <td class="px-4 py-3 align-top" id="status-{{ s.id }}">
-            {% include "solicitacoes/partials/_status_badge.html" with status=s.status label=s.status size="xs" only %}
-          </td>
-
-          {# Ações #}
-          <td class="px-4 py-3 align-top" id="actions-{{ s.id }}">
-            {% include "solicitacoes/partials/_actions.html" with s=s shop=shop %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="6" class="px-4 py-10 text-center text-gray-500">
-            Nenhuma solicitação encontrada.
-          </td>
-        </tr>
-        {% endfor %}
+        {# --------- MODO: AGENDAMENTOS --------- #}
+        {% if list_kind == "agendamentos" %}
+          {% for a in page_obj %}
+          <tr id="ag-{{ a.id }}" class="transition">
+            <td class="align-top">
+              <div class="font-medium">
+                {% if a.inicio %}{{ a.inicio|date:"d/m/Y H:i" }}{% else %}—{% endif %}
+              </div>
+            </td>
+            <td class="align-top">
+              <div class="font-medium truncate max-w-[220px]" title="{% firstof a.cliente_nome a.cliente.nome '—' %}">
+                {% firstof a.cliente_nome a.cliente.nome "—" %}
+              </div>
+              <div class="ia-text-muted truncate max-w-[220px]">
+                {% if a.cliente and a.cliente.telefone %}{{ a.cliente.telefone }}{% else %}—{% endif %}
+              </div>
+            </td>
+            <td class="align-top hidden md:table-cell">
+              <div class="truncate max-w-[240px]">{% firstof a.servico_nome a.servico.nome "—" %}</div>
+            </td>
+            <td class="align-top">
+              {% include "solicitacoes/partials/_status_badge.html" with status=a.status label=a.status size="xs" only %}
+            </td>
+            <td class="align-top text-right">
+              {% if a.status|stringformat:"s"|upper == "CONFIRMADO" and shop %}
+                <div class="row-actions flex justify-end gap-2">
+                  <button type="button" class="btn btn-primary"
+                          data-finalize-url="{% url 'agendamentos:finalizar' shop.slug a.id %}"
+                          onclick="submitFinalize(this)">🏁 Finalizar</button>
+                  <button type="button" class="btn btn-warning"
+                          data-noshow-url="{% url 'agendamentos:no_show' shop.slug a.id %}"
+                          onclick="submitNoShow(this)">🚫 No-show</button>
+                </div>
+              {% else %}
+                <a href="{% url 'solicitacoes:detalhe' shop.slug a.id %}" class="btn btn-outline">👁️ Ver</a>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="px-4 py-10 text-center ia-text-muted">Nenhum agendamento encontrado.</td></tr>
+          {% endfor %}
+        {% endif %}
       </tbody>
     </table>
   </div>
 
+  {# =================== PAGINAÇÃO =================== #}
+  {% if page_obj and page_obj.paginator.num_pages > 1 %}
+  <nav class="mt-4 flex items-center justify-between text-sm">
+    <div class="ia-text-muted">
+      Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+    </div>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}
+        <a class="btn btn-secondary btn--sm" href="?{% if filters.q %}q={{ filters.q }}&{% endif %}{% if filters.status %}status={{ filters.status }}&{% endif %}page={{ page_obj.previous_page_number }}">← Anterior</a>
+      {% else %}
+        <span class="btn btn-secondary btn--sm opacity-50 cursor-not-allowed">← Anterior</span>
+      {% endif %}
+      {% if page_obj.has_next %}
+        <a class="btn btn-secondary btn--sm" href="?{% if filters.q %}q={{ filters.q }}&{% endif %}{% if filters.status %}status={{ filters.status }}&{% endif %}page={{ page_obj.next_page_number }}">Próxima →</a>
+      {% else %}
+        <span class="btn btn-secondary btn--sm opacity-50 cursor-not-allowed">Próxima →</span>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
 </div>
-
-{# =================== ESTILOS =================== #}
-<style>
-  .status-badge { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
-  .btn-action    { @apply inline-flex items-center justify-center rounded-xl px-3 py-1.5 text-sm transition; }
-</style>
-
-{# =================== JS =================== #}
-<script>
-  // --- CSRF helpers ---
-  function getCookie(name) {
-    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return m ? m.pop() : '';
-  }
-  const csrftoken = getCookie('csrftoken');
-
-  async function postForm(url, dataObj) {
-    const form = new URLSearchParams();
-    Object.entries(dataObj || {}).forEach(([k, v]) => form.append(k, v ?? ''));
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'X-CSRFToken': csrftoken,
-        'X-Requested-With': 'XMLHttpRequest',
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      },
-      body: form.toString(),
-    });
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`HTTP ${resp.status} - ${txt}`);
-    }
-    try { return await resp.json(); } catch { return {}; }
-  }
-
-  // --- Ações ---
-  async function openConfirm(btn) {
-    const url = btn.dataset.confirmUrl;
-    const inicioDefault = btn.dataset.inicio || '';
-    const inicio = prompt('Informe a data/hora do início (YYYY-MM-DDTHH:MM)', inicioDefault);
-    if (!inicio) return;
-
-    const servicoId = btn.dataset.servicoId || '';
-    const precoCotado = btn.dataset.preco || '';
-
-    try {
-      await postForm(url, { inicio, servico_id: servicoId, preco_cotado: precoCotado });
-      location.reload();
-    } catch (e) {
-      alert('Erro ao confirmar: ' + e.message);
-    }
-  }
-
-  async function openDeny(btn) {
-    const url = btn.dataset.denyUrl;
-    const motivo = prompt('Motivo da negativa (opcional):', '');
-    try {
-      await postForm(url, { motivo: motivo || '' });
-      location.reload();
-    } catch (e) {
-      alert('Erro ao negar: ' + e.message);
-    }
-  }
-
-  async function submitFinalize(btn) {
-    const url = btn.dataset.finalizeUrl;
-    if (!confirm('Finalizar este atendimento?')) return;
-    try {
-      await postForm(url, {});
-      location.reload();
-    } catch (e) {
-      alert('Erro ao finalizar: ' + e.message);
-    }
-  }
-
-  async function submitNoShow(btn) {
-    const url = btn.dataset.noshowUrl;
-    if (!confirm('Marcar como no-show?')) return;
-    try {
-      await postForm(url, {});
-      location.reload();
-    } catch (e) {
-      alert('Erro ao marcar no-show: ' + e.message);
-    }
-  }
-
-  // Expor globalmente
-  window.openConfirm    = openConfirm;
-  window.openDeny       = openDeny;
-  window.submitFinalize = submitFinalize;
-  window.submitNoShow   = submitNoShow;
-</script>
 {% endblock %}

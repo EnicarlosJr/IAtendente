@@ -1,10 +1,9 @@
-{# Filtro de status para Solicitação (sem "CONFIRMADO") #}
-<select name="status"
-        class="rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300"
-        aria-label="Filtrar por status">
-  <option value="">Status</option>
-  <option value="PENDENTE"   {% if filters.status == 'PENDENTE' %}selected{% endif %}>Pendente</option>
-  <option value="CONFIRMADA" {% if filters.status == 'CONFIRMADA' %}selected{% endif %}>Confirmada</option>
-  <option value="NEGADA"     {% if filters.status == 'NEGADA' %}selected{% endif %}>Negada</option>
-  <option value="REALIZADA"  {% if filters.status == 'REALIZADA' %}selected{% endif %}>Realizada</option>
+{% with sel=filters.status|default:"" %}
+<select name="status" class="rounded-xl border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-300">
+  <option value="PENDENTE"   {% if sel == "PENDENTE" %}selected{% endif %}>Pendente</option>
+  <option value="NEGADA"     {% if sel == "NEGADA" %}selected{% endif %}>Negada</option>
+  <option value="CONFIRMADA" {% if sel == "CONFIRMADA" %}selected{% endif %}>Confirmada</option>
+  <option value="FINALIZADA" {% if sel == "FINALIZADA" %}selected{% endif %}>Finalizada</option>
+  <option value="NO_SHOW"    {% if sel == "NO_SHOW" or sel == "CANCELADA" %}selected{% endif %}>No-show / Cancelada</option>
 </select>
+{% endwith %}

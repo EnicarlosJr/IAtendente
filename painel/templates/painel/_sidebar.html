@@ -1,173 +1,138 @@
-{% with rm=request.resolver_match|default:'' ns=rm.namespace|default:'' url_name=rm.url_name|default:'' q=request.GET.urlencode pending=solicitacoes_pendentes_count|default:0 %}
+{% with rm=request.resolver_match|default:'' ns=rm.namespace|default:'' url_name=rm.url_name|default:'' pending=solicitacoes_pendentes_count|default:0 %}
 
-
+  {# ---- Cabeçalho do shop ativo ---- #}
   {% if shop %}
-  <div class="px-3 py-1 text-xs text-green-700 bg-green-100 rounded">
-    Shop ativo: {{ shop.slug }}
-  </div>
-{% else %}
-  <div class="px-3 py-1 text-xs text-red-700 bg-red-100 rounded">
-    Nenhuma barbearia encontrada.
-  </div>
-{% endif %}
-
-
-
-
-
+    <div class="px-3 py-1 mx-3 mt-3 mb-2 text-[11px] font-medium text-green-700 bg-green-50 border border-green-200 rounded">
+      Barbearia ativa: <span class="font-semibold">{{ shop.nome|default:shop.slug }}</span>
+    </div>
+  {% else %}
+    <div class="px-3 py-1 mx-3 mt-3 mb-2 text-[11px] font-medium text-red-700 bg-red-50 border border-red-200 rounded">
+      Nenhuma barbearia ativa. <a href="{% url 'painel:dashboard' %}" class="underline hover:no-underline">Selecionar</a>
+    </div>
+  {% endif %}
 
   <!-- BRAND -->
-  <div class="px-4 py-4 border-b border-gray-200 bg-slate-50">
+  <div class="ia-sidebar__brand px-4 py-4 border-b border-gray-200 bg-slate-50">
     {% if request.user.is_authenticated %}
       <a href="{% url 'painel:dashboard' %}" class="block">
-        <div class="text-lg font-bold text-slate-800">IAtendente</div>
-        <div class="text-xs text-gray-500">Painel Administrativo</div>
+        <div class="ia-sidebar__title text-lg font-bold text-slate-800">IAtendente</div>
+        <div class="ia-sidebar__sub text-xs text-gray-500">Painel Administrativo</div>
       </a>
     {% else %}
-      <div class="text-lg font-bold text-slate-400">IAtendente</div>
-      <div class="text-xs text-gray-400">Painel Administrativo</div>
+      <div class="ia-sidebar__title ia-text-muted text-lg font-bold text-slate-400">IAtendente</div>
+      <div class="ia-sidebar__sub ia-text-muted text-xs text-gray-400">Painel Administrativo</div>
     {% endif %}
   </div>
 
   <!-- NAV -->
-  <nav class="p-3 space-y-2 text-sm">
-    <div class="px-2 pt-2 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Navegação</div>
+  <nav class="ia-nav p-3 text-sm" role="navigation" aria-label="Navegação principal">
+    <div class="px-2 pt-2 pb-1 text-[11px] uppercase tracking-wide ia-text-muted text-gray-500">Navegação</div>
 
-    <!-- Dashboard -->
-    {% if request.user.is_authenticated %}
-      <a href="{% url 'painel:dashboard' %}"
-         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-                {% if ns == 'painel' and url_name == 'dashboard' %}
-                  bg-blue-600 text-white shadow-sm
-                {% else %}
-                  text-slate-700 hover:bg-slate-50
-                {% endif %}">
-        <span>🏠</span><span>Dashboard</span>
-      </a>
-    {% else %}
-      <span class="block px-3 py-2 text-slate-400">Dashboard indisponível</span>
-    {% endif %}
+    {# Dashboard #}
+    <a href="{% url 'painel:dashboard' %}"
+       class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg transition
+              {% if ns == 'painel' and url_name == 'dashboard' %} ia-nav__link--active {% else %} text-slate-700 hover:bg-slate-50 {% endif %}"
+       {% if ns == 'painel' and url_name == 'dashboard' %}aria-current="page"{% endif %}>
+      <span>🏠</span><span>Dashboard</span>
+    </a>
 
-    <!-- Agenda -->
+    {# Agenda #}
     <details class="group" {% if ns == 'agendamentos' %}open{% endif %}>
-      <summary class="flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition
-                      {% if ns == 'agendamentos' %}
-                        bg-blue-600 text-white shadow-sm
-                      {% else %}
-                        text-slate-700 hover:bg-slate-50
-                      {% endif %}">
+      <summary class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition
+                      {% if ns == 'agendamentos' %} ia-nav__link--active {% else %} text-slate-700 hover:bg-slate-50 {% endif %}">
         <span>📅</span><span class="flex-1">Agenda</span>
-        <span class="transition-transform group-open:rotate-180 opacity-70">▾</span>
+        <span class="opacity-70 transition-transform group-open:rotate-180">▾</span>
       </summary>
       <div class="mt-1 ml-6 space-y-1">
         {% if shop %}
-          <a href="{% url 'agendamentos:agenda_dia' shop.slug %}?view=dia"
-             class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_dia' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
-            Dia
-          </a>
-          <a href="{% url 'agendamentos:agenda_semana' shop.slug %}?view=semana"
-             class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_semana' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
-            Semana
-          </a>
-          <a href="{% url 'agendamentos:agenda_mes' shop.slug %}?view=mes"
-             class="block px-3 py-2 rounded-md transition {% if url_name == 'agenda_mes' %}bg-blue-600 text-white{% else %}hover:bg-slate-50{% endif %}">
-            Mês
-          </a>
+          <a href="{% url 'agendamentos:agenda_dia' shop.slug %}"
+             class="ia-nav__link block px-3 py-2 rounded-md transition {% if url_name == 'agenda_dia' %} ia-nav__link--active {% else %} hover:bg-slate-50 {% endif %}"
+             {% if url_name == 'agenda_dia' %}aria-current="page"{% endif %}>Dia</a>
+          <a href="{% url 'agendamentos:agenda_semana' shop.slug %}"
+             class="ia-nav__link block px-3 py-2 rounded-md transition {% if url_name == 'agenda_semana' %} ia-nav__link--active {% else %} hover:bg-slate-50 {% endif %}"
+             {% if url_name == 'agenda_semana' %}aria-current="page"{% endif %}>Semana</a>
+          <a href="{% url 'agendamentos:agenda_mes' shop.slug %}"
+             class="ia-nav__link block px-3 py-2 rounded-md transition {% if url_name == 'agenda_mes' %} ia-nav__link--active {% else %} hover:bg-slate-50 {% endif %}"
+             {% if url_name == 'agenda_mes' %}aria-current="page"{% endif %}>Mês</a>
         {% else %}
-          <span class="block px-3 py-2 text-slate-400">Agenda indisponível</span>
+          <span class="block px-3 py-2 ia-text-muted">Agenda indisponível</span>
         {% endif %}
       </div>
     </details>
 
-    <!-- Solicitações -->
-    {% if request.user.is_authenticated %}
-      <a href="{% url 'painel:solicitacoes' %}"
-         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-                {% if ns == 'painel' and url_name == 'solicitacoes' %}
-                  bg-blue-600 text-white shadow-sm
-                {% else %}
-                  text-slate-700 hover:bg-slate-50
-                {% endif %}">
-        <span>📝</span>
-        <span class="flex-1">Solicitações</span>
-        <span class="ml-auto inline-flex items-center rounded-full text-[11px] px-2 py-0.5
-                     {% if pending|default:0 > 0 %}
-                       bg-amber-100 text-amber-700
-                     {% else %}
-                       bg-slate-100 text-slate-600
-                     {% endif %}">
-          {{ pending|default:0 }}
-        </span>
+    {# Solicitações #}
+    {% if shop %}
+      <a href="{% url 'solicitacoes:solicitacoes' shop.slug %}"
+         class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'solicitacoes' %} ia-nav__link--active {% else %} text-slate-700 hover:bg-slate-50 {% endif %}">
+        <span>📝</span><span class="flex-1">Solicitações</span>
+        <span class="ia-badge inline-flex items-center text-[11px] px-2 py-0.5 rounded-full">{{ pending|default:0 }}</span>
       </a>
     {% else %}
-      <span class="block px-3 py-2 text-slate-400">Solicitações indisponível</span>
+      <span class="block px-3 py-2 ia-text-muted">Solicitações indisponível</span>
     {% endif %}
 
-    <!-- Serviços -->
-    {% if request.user.is_authenticated and shop %}
+    {# Serviços #}
+    {% if shop %}
       <a href="{% url 'servicos:lista' shop.slug %}"
-         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-                {% if ns == 'servicos' %}
-                  bg-blue-600 text-white shadow-sm
-                {% else %}
-                  text-slate-700 hover:bg-slate-50
-                {% endif %}">
+         class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'servicos' %} ia-nav__link--active {% else %} text-slate-700 hover:bg-slate-50 {% endif %}">
         <span>✂️</span><span>Serviços</span>
       </a>
     {% else %}
-      <span class="block px-3 py-2 text-slate-400">Serviços indisponível</span>
+      <span class="block px-3 py-2 ia-text-muted">Serviços indisponível</span>
     {% endif %}
 
-    <!-- Clientes -->
-    {% if request.user.is_authenticated and shop %}
+    {# Clientes #}
+    {% if shop %}
       <a href="{% url 'clientes:lista' shop.slug %}"
-         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-                {% if ns == 'clientes' %}
-                  bg-blue-600 text-white shadow-sm
-                {% else %}
-                  text-slate-700 hover:bg-slate-50
-                {% endif %}">
+         class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'clientes' %} ia-nav__link--active {% else %} text-slate-700 hover:bg-slate-50 {% endif %}">
         <span>👤</span><span>Clientes</span>
       </a>
     {% else %}
-      <span class="block px-3 py-2 text-slate-400">Clientes indisponível</span>
+      <span class="block px-3 py-2 ia-text-muted">Clientes indisponível</span>
     {% endif %}
-
-    <!-- Usuários (somente se gerente/dono) -->
+    {# Equipe (dono/gerente) #}
     {% if is_manager and shop %}
+      <div class="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide ia-text-muted">Equipe</div>
+
       <a href="{% url 'barbearias:usuarios' shop.slug %}"
-         class="flex items-center gap-2 px-3 py-2 rounded-lg transition
-                {% if ns == 'barbearias' and url_name == 'usuarios' %}
-                  bg-blue-600 text-white shadow-sm
-                {% else %}
-                  text-slate-700 hover:bg-slate-50
-                {% endif %}">
+         class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg transition
+                {% if ns == 'barbearias' and url_name == 'usuarios' %} ia-nav__link--active {% else %} text-slate-700 hover:bg-slate-50 {% endif %}">
         <span>👥</span><span>Usuários</span>
+        <span class="ml-auto text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">Gerenciar</span>
       </a>
-    {% else %}
-      {% if request.user.is_authenticated %}
-        <span class="block px-3 py-2 text-slate-400">Usuários indisponível</span>
+
+      {% url 'barbearias:access_log' shop.slug as access_log_url %}
+      {% if access_log_url %}
+        <a href="{{ access_log_url }}"
+           class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg transition
+                  {% if ns == 'barbearias' and url_name == 'access_log' %} ia-nav__link--active {% else %} text-slate-700 hover:bg-slate-50 {% endif %}">
+          <span>📈</span><span>Fluxo de acessos</span>
+        </a>
       {% endif %}
     {% endif %}
 
-    <!-- Atalhos -->
-    <div class="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide text-gray-500">Atalhos</div>
+    {# Atalhos #}
+    <div class="px-2 pt-3 pb-1 text-[11px] uppercase tracking-wide ia-text-muted">Atalhos</div>
+
     {% if shop %}
-      <a href="{% url 'agendamentos:agenda_dia' shop.slug %}?new=1"
-         class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
+      <a href="{% url 'agendamentos:agendamento_novo' shop.slug %}"
+         class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
         <span>➕</span><span>Novo horário</span>
       </a>
+      {% url 'public:intake_shop' shop.slug as pub_url %}
+      {% if pub_url %}
+        <a href="{{ pub_url }}" target="_blank" rel="noopener"
+           class="ia-nav__link flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
+          <span>🌐</span>
+          <span class="flex-1">Página pública (receber solicitações)</span>
+          <span class="ml-auto text-[10px] ia-text-muted">nova aba ↗</span>
+        </a>
+      {% endif %}
     {% else %}
-      <span class="block px-3 py-2 text-slate-400">Novo horário indisponível</span>
-    {% endif %}
-
-    {% if request.user.is_authenticated and shop %}
-      <a href="{% url 'clientes:novo' shop.slug %}"
-         class="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-50 transition">
-        <span>👥</span><span>Novo cliente</span>
-      </a>
-    {% else %}
-      <span class="block px-3 py-2 text-slate-400">Novo cliente indisponível</span>
+      <span class="block px-3 py-2 ia-text-muted">Atalhos indisponíveis</span>
     {% endif %}
   </nav>
 

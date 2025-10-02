@@ -1,3 +1,4 @@
+from django.utils import timezone
 from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
@@ -81,3 +82,28 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.user} @ {self.shop} ({self.role})"
+
+
+class AccessEvent(models.Model):
+    class Kind(models.TextChoices):
+        LOGIN = "LOGIN", "Login"
+        LOGOUT = "LOGOUT", "Logout"
+        VIEW = "VIEW", "Visualização"  # se quiser registrar páginas sensíveis
+
+    shop = models.ForeignKey("barbearias.BarberShop", on_delete=models.CASCADE, related_name="access_events")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="access_events")
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    path = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["shop", "created_at"]),
+            models.Index(fields=["shop", "kind", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"[{self.created_at:%d/%m %H:%M}] {self.kind} - {self.user} @ {self.shop}"

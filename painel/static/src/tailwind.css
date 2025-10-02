@@ -2,17 +2,108 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Componentes personalizados */
+/* =================== Componentes personalizados =================== */
 @layer components {
-  .card{ @apply rounded-2xl border border-slate-200 bg-white shadow-sm; }
-  .pill{ @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs; }
-  .kpi-val{ @apply mt-1 text-3xl font-bold text-slate-900; }
-  .kpi-hint{ @apply mt-1 text-xs text-slate-500; }
-  .section-title{ @apply text-sm font-semibold text-slate-900; }
-  .soft-divider{ @apply border-b border-slate-200; }
+  /* -------- Layout / Estrutura -------- */
+  .card {
+    @apply rounded-2xl border shadow-sm;
+    background: var(--panel);
+    border-color: var(--panel-border);
+  }
 
-  .btn{ @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition; }
-  .btn-outline{ @apply border bg-white text-slate-800 hover:bg-slate-50; }
-  .btn-primary{ @apply bg-blue-600 text-white hover:bg-blue-700 shadow-sm; }
-  .btn-amber{ @apply bg-amber-100 text-amber-800 hover:bg-amber-200; }
+  .soft-divider { @apply border-b; border-color: var(--panel-border); }
+
+  .section-title { @apply text-sm font-semibold; color: var(--text); }
+
+  .kpi-val  { @apply mt-1 text-3xl font-bold; color: var(--text); }
+  .kpi-hint { @apply mt-1 text-xs; color: var(--muted); }
+
+  .pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs;
+    background: color-mix(in oklab, #ffffff 80%, var(--panel));
+    color: var(--text);
+  }
+  /* melhor contraste no dark */
+  [data-theme="dark"] .pill {
+    background: rgba(255,255,255,.08);
+    color: var(--text);
+  }
+
+  /* -------- Botões base (estrutura) -------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-[10px] px-3 py-1.5
+           text-sm font-semibold transition border focus:outline-none
+           focus:ring-2 focus:ring-offset-1;
+    border-color: transparent;
+    /* ring usa brand token */
+    --tw-ring-color: var(--brand);
+  }
+
+  /* Variações – cores via tokens (não “pintam” o tema) */
+  .btn-primary {
+    @apply shadow-sm;
+    background: var(--brand);
+    color: var(--brand-contrast);
+  }
+  .btn-primary:hover { background: var(--brand-600); }
+
+  .btn-secondary {
+    @apply shadow-sm;
+    background: var(--panel);
+    color: var(--text);
+    border-color: var(--panel-border);
+  }
+  .btn-secondary:hover {
+    background: color-mix(in oklab, var(--panel) 92%, #000);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--panel-border);
+  }
+  .btn-outline:hover {
+    background: color-mix(in oklab, var(--panel) 95%, #000);
+  }
+
+  .btn-danger {
+    @apply shadow-sm;
+    background: #e11d48; /* consistente com base-crm */
+    color: #fff;
+  }
+  .btn-danger:hover { background: #be123c; }
+
+  .btn-warning {
+    @apply shadow-sm;
+    background: var(--warning);
+    color: #111827;
+  }
+
+  .btn-amber { /* “tag” suave, não botão de ação primária */
+    background: #fef3c7;  /* amber-100 */
+    color: #92400e;       /* amber-800 */
+  }
+
+  /* Tamanhos */
+  .btn-xs { @apply px-2 py-1 text-xs rounded; }
+  .btn-lg { @apply px-4 py-2 text-base rounded-[12px]; }
+
+  /* -------- Tabela utilitária -------- */
+  .ia-table-wrap { @apply overflow-auto rounded-[12px] border; background: var(--panel); border-color: var(--panel-border); }
+  .ia-table      { @apply w-full; border-collapse: separate; border-spacing: 0; min-width: 720px; }
+  .ia-table thead th {
+    @apply text-left text-xs font-medium sticky top-0 z-10;
+    padding: 10px 12px;
+    background: color-mix(in oklab, var(--panel) 90%, #fff);
+    color: var(--muted);
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .ia-table td { padding: 10px 12px; border-top: 1px solid var(--panel-border); }
+  .ia-table tbody tr:hover { background: color-mix(in oklab, var(--panel) 96%, #000); }
+}
+
+/* --------- Pequenos ajustes “base” para respeitar tokens --------- */
+@layer base {
+  /* evita que classes utilitárias do tailwind “forcem” branco/preto no tema */
+  html, body { color: var(--text); background: var(--bg); }
 }

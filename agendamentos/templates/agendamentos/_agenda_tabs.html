@@ -1,11 +1,21 @@
-<div class="mb-4 flex gap-2">
-  <a href="{% url 'agendamentos:agenda_dia' shop.slug %}" class="px-3 py-1.5 rounded-lg border text-sm
-     {% if view == 'dia' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-50{% endif %}">
-     Dia</a>
-  <a href="{% url 'agendamentos:agenda_semana' shop.slug %}" class="px-3 py-1.5 rounded-lg border text-sm
-     {% if view == 'semana' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-50{% endif %}">
-     Semana</a>
-  <a href="{% url 'agendamentos:agenda_mes' shop.slug %}" class="px-3 py-1.5 rounded-lg border text-sm
-     {% if view == 'mes' %}bg-slate-900 text-white{% else %}bg-white text-slate-700 hover:bg-slate-50{% endif %}">
-     Mês</a>
-</div>
+<nav class="mb-4" aria-label="Alternar visão da agenda">
+  <div class="flex gap-2">
+    <a href="{% url 'agendamentos:agenda_dia' shop.slug %}"
+       class="btn {% if view == 'dia' %}btn-primary{% else %}btn-outline{% endif %}"
+       {% if view == 'dia' %}aria-current="page"{% endif %}>
+      📅 Dia
+    </a>
+
+    <a href="{% url 'agendamentos:agenda_semana' shop.slug %}"
+       class="btn {% if view == 'semana' %}btn-primary{% else %}btn-outline{% endif %}"
+       {% if view == 'semana' %}aria-current="page"{% endif %}>
+      🗓️ Semana
+    </a>
+
+    <a href="{% url 'agendamentos:agenda_mes' shop.slug %}"
+       class="btn {% if view == 'mes' %}btn-primary{% else %}btn-outline{% endif %}"
+       {% if view == 'mes' %}aria-current="page"{% endif %}>
+      📆 Mês
+    </a>
+  </div>
+</nav>

@@ -1,69 +1,112 @@
-/* ===== IAtendente · Layout com prefixo ia- ===== */
-:root{
-  --panel:#fff; --panel-border:#e5e7eb; --bg:#f8fafc; --text:#0f172a; --muted:#64748b;
-  --shadow-sm:0 1px 2px rgba(0,0,0,.06);
-  --radius:12px; --radius-sm:10px; --radius-xs:8px;
-}
+/* ======================= ia.css ======================= */
+/* Depende de styles.css (tokens) + base-crm.css (componentes) */
 
-html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--text)}
-
-/* GRID PRINCIPAL: sidebar + conteúdo */
+/* GRID PRINCIPAL – layout com sidebar fixa no desktop e drawer no mobile */
 .ia-layout{
   min-height:100vh;
   display:grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns:1fr;             /* mobile */
+  grid-template-rows:auto 1fr;
+  background:var(--bg); color:var(--text);
 }
-@media (max-width:1024px){
-  .ia-layout{ grid-template-columns: 1fr; }
+@media (min-width:1025px){
+  .ia-layout{ grid-template-columns:280px 1fr; grid-template-rows:1fr; }
 }
 
-/* SIDEBAR (coluna esquerda) */
-.ia-sidebar{
-  background:var(--panel);
-  border-right:1px solid var(--panel-border);
-}
-.ia-sidebar__brand{padding:18px 16px;border-bottom:1px solid var(--panel-border)}
-.ia-sidebar__title{font-weight:700;font-size:18px}
-.ia-sidebar__sub{font-size:12px;color:var(--muted)}
+/* SIDEBAR: fixa no desktop */
+.ia-sidebar{ background:var(--panel); border-right:1px solid var(--panel-border); display:none; }
+@media (min-width:1025px){ .ia-sidebar{ display:block; } }
 
-.ia-nav{padding:8px;display:grid;gap:4px}
+/* Drawer mobile (use .ia-sidebar--drawer no HTML + body.ia-open) */
+.ia-sidebar--drawer{
+  position:fixed; inset:0 30% 0 0; max-width:320px; transform:translateX(-100%);
+  transition:transform .25s ease; display:block; z-index:60; box-shadow:var(--shadow-md);
+}
+body.ia-open .ia-sidebar--drawer{ transform:translateX(0); }
+.ia-drawer-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:55;
+  opacity:0; pointer-events:none; transition:opacity .2s ease;
+}
+body.ia-open .ia-drawer-overlay{ opacity:1; pointer-events:auto; }
+
+/* Branding e navegação (prefixada) */
+.ia-sidebar__brand{ padding:18px 16px; border-bottom:1px solid var(--panel-border); }
+.ia-sidebar__title{ font-weight:700; font-size:18px; }
+.ia-sidebar__sub{ font-size:12px; color:var(--muted); }
+
+.ia-nav{ padding:8px; display:grid; gap:4px; }
 .ia-nav__link{
-  display:flex;align-items:center;gap:10px;
-  padding:10px 12px;border-radius:var(--radius-xs);
-  color:inherit;text-decoration:none;
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px; border-radius:var(--radius-xs);
+  color:inherit; text-decoration:none;
 }
-.ia-nav__link:hover{background:#f1f5f9}
-.ia-nav__link--active{background:#0f172a;color:#fff;box-shadow:var(--shadow-sm)}
-.ia-nav__icon{width:18px;text-align:center}
-.ia-badge{margin-left:auto;display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:#fffbeb;color:#b45309;border:1px solid #fde68a}
+.ia-nav__link:hover{ background:rgba(226,232,240,.5); }
+[data-theme="dark"] .ia-nav__link:hover{ background:rgba(255,255,255,.06); }
+.ia-nav__link--active{ background:var(--brand); color:var(--brand-contrast); box-shadow:var(--shadow-sm); }
+.ia-nav__icon{ width:18px; text-align:center; }
+.ia-badge{
+  margin-left:auto; display:inline-flex; align-items:center;
+  font-size:12px; line-height:1; padding:2px 8px; border-radius:999px;
+  background:color-mix(in oklab, var(--warning) 18%, var(--panel-2));
+  color:#b45309; border:1px solid color-mix(in oklab, var(--warning) 45%, var(--panel-border));
+}
 
-/* TOPBAR (sticky, sem sobrepor) */
+/* TOPBAR (escopo ia-) */
 .ia-topbar{
-  position:sticky;top:0;z-index:5;
-  height:56px;display:flex;align-items:center;justify-content:space-between;
-  padding:0 16px;background:rgba(255,255,255,.85);
+  position:sticky; top:0; z-index:50; height:56px; padding:0 16px;
+  display:flex; align-items:center; justify-content:space-between;
   backdrop-filter:saturate(140%) blur(6px);
+  background:color-mix(in oklab, var(--panel) 85%, transparent);
   border-bottom:1px solid var(--panel-border);
+  padding-left:calc(env(safe-area-inset-left) + 16px);
+  padding-right:calc(env(safe-area-inset-right) + 16px);
+}
+@supports not (backdrop-filter:blur(6px)){ .ia-topbar{ background:var(--panel); } }
+
+/* Conteúdo central */
+.ia-page{ max-width:1280px; margin:16px auto; padding:0 16px; }
+
+/* Cards e formulários (prefixados) */
+.ia-card{ background:var(--panel); border:1px solid var(--panel-border); border-radius:var(--radius); box-shadow:var(--shadow-sm); }
+.ia-card__body{ padding:16px; }
+
+.ia-input,.ia-select,.ia-textarea{
+  width:100%; background:#fff; color:var(--text);
+  border:1px solid var(--panel-border); border-radius:10px; padding:10px 12px; font-size:14px;
+  transition:border-color .15s, box-shadow .15s;
+}
+.ia-input::placeholder{ color:#94a3b8; }
+.ia-input:focus,.ia-select:focus,.ia-textarea:focus{
+  border-color:color-mix(in oklab, var(--brand) 60%, var(--panel-border));
+  box-shadow:0 0 0 3px color-mix(in oklab, var(--brand) 25%, transparent);
 }
 
-/* CONTEÚDO */
-.ia-page{max-width:1200px;margin:16px auto;padding:0 16px}
+/* Grids utilitários prefixados */
+.ia-grid{ display:grid; gap:16px; }
+.ia-grid--2{ grid-template-columns:repeat(1,1fr); }
+.ia-grid--3{ grid-template-columns:repeat(1,1fr); }
+.ia-grid--4{ grid-template-columns:repeat(1,1fr); }
+@media (min-width:640px){ .ia-grid--2{ grid-template-columns:repeat(2,1fr); } }
+@media (min-width:1024px){ .ia-grid--3{ grid-template-columns:repeat(3,1fr); } }
+@media (min-width:1280px){ .ia-grid--4{ grid-template-columns:repeat(4,1fr); } }
 
-/* Componentes básicos */
-.ia-card{background:var(--panel);border:1px solid var(--panel-border);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
-.ia-card__body{padding:16px}
-.ia-input{width:100%;border:1px solid var(--panel-border);border-radius:10px;padding:10px 12px}
-
-/* Força a sidebar a não ser fixed, custe o que custar */
-.ia-sidebar { position: static !important; z-index: 1 !important; }
-
-/* Garante que o grid do layout sempre vence */
-.ia-layout {
-  position: relative;
-  display: grid !important;
-  grid-template-columns: 280px 1fr !important;
+/* Tabela prefixada (alinha com ia-table* do CRM) */
+.ia-table-wrap{ position:relative; overflow:auto; border-radius:var(--radius-sm); border:1px solid var(--panel-border); background:var(--panel); }
+.ia-table{ width:100%; border-collapse:separate; border-spacing:0; min-width:720px; }
+.ia-table th,.ia-table td{ padding:10px 12px; }
+.ia-table thead th{
+  position:sticky; top:0; z-index:1; background:var(--panel-2);
+  color:var(--muted); font-size:12px; border-bottom:1px solid var(--panel-border);
+}
+.ia-table tbody tr{ border-bottom:1px solid var(--panel-border); }
+.ia-table tbody tr:hover{ background:rgba(226,232,240,.35); }
+@media (prefers-color-scheme:dark){
+  .ia-table thead th{ background:#0c1426; }
 }
 
-/* Evita que qualquer container externo “corte” sticky/topbar */
-.ia-layout, .ia-layout > main { overflow: visible !important; }
+/* Row actions no mobile/desktop */
+.ia-row-actions{ opacity:1; transition:opacity .15s; }
+@media (min-width:1025px){ .ia-row-actions{ opacity:0; } .ia-table tbody tr:hover .ia-row-actions{ opacity:1; } }
+
+/* Dock mobile */
+.ia-mobile-dock{ position:sticky; bottom:0; z-index:40; background:var(--panel); border-top:1px solid var(--panel-border); padding:8px; display:flex; gap:8px; }

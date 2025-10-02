@@ -1,0 +1,167 @@
+{% extends "painel/base.html" %}
+{% block title %}Dashboard Gerencial{% endblock %}
+{% block header %}Dashboard · Gerencial{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-3 sm:px-4 space-y-6">
+
+  <!-- Header -->
+  <section class="card p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">Mês base</div>
+      <h2 class="text-xl font-semibold">{{ base_date|date:"F \\d\\e Y" }}</h2>
+    </div>
+    <div class="flex items-center gap-2">
+      {% if shop_slug %}
+      <a class="btn btn-outline" href="{% url 'painel:dashboard_op_slug' shop_slug %}">Visão Operacional</a>
+      {% else %}
+      <a class="btn btn-outline" href="{% url 'painel:dashboard_op' %}">Visão Operacional</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- KPIs -->
+  <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div class="card p-4">
+      <div class="text-xs text-slate-500">Faturamento (mês)</div>
+      <div class="text-xl font-semibold">R$ {{ kpis.faturamento_mes|default:0|floatformat:2 }}</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-500">Ticket médio</div>
+      <div class="text-xl font-semibold">R$ {{ kpis.ticket_medio|default:0|floatformat:2 }}</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-500">Clientes novos (mês)</div>
+      <div class="text-xl font-semibold">{{ kpis.clientes_novos_mes|default:0 }}</div>
+    </div>
+    <div class="card p-4">
+      <div class="text-xs text-slate-500">Ocupação (hoje)</div>
+      <div class="text-xl font-semibold">{{ kpis.utilizacao_hoje|default:0 }}%</div>
+    </div>
+  </section>
+
+  <!-- Charts -->
+  <section class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <!-- Faturamento diário (linha) -->
+    <div class="xl:col-span-2 card p-4">
+      <div class="section-title mb-2">Faturamento diário (mês)</div>
+      <div id="ec-rev" style="height: 360px;"></div>
+    </div>
+
+    <!-- Top serviços (barra horizontal) -->
+    <div class="card p-4">
+      <div class="section-title mb-2">Serviços mais executados</div>
+      <div id="ec-top-srv" style="height: 360px;"></div>
+    </div>
+
+    <!-- Heatmap semanal -->
+    <div class="xl:col-span-3 card p-4">
+      <div class="section-title mb-2">Heatmap de ocupação (semana da data base)</div>
+      <div id="ec-heatmap" style="height: 360px;"></div>
+    </div>
+  </section>
+
+  <!-- Ranking clientes -->
+  <section class="card p-4">
+    <div class="section-title mb-3">Ranking de clientes (mês)</div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50">
+          <tr class="text-left text-slate-600">
+            <th class="px-4 py-2 font-medium">Cliente</th>
+            <th class="px-4 py-2 font-medium">Atend.</th>
+            <th class="px-4 py-2 font-medium text-right">Total (R$)</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for r in ranking_clientes %}
+          <tr class="hover:bg-slate-50 transition">
+            <td class="px-4 py-2 truncate">{{ r.nome|default:"(sem nome)" }}</td>
+            <td class="px-4 py-2">{{ r.visitas }}</td>
+            <td class="px-4 py-2 text-right">R$ {{ r.total|floatformat:2 }}</td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td class="px-4 py-6 text-center text-slate-500" colspan="3">
+              Sem dados para o período.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+{{ ec_rev_labels|default_if_none:'[]'|json_script:"rev-labels" }}
+{{ ec_rev_values|default_if_none:'[]'|json_script:"rev-values" }}
+{{ ec_rev_ma7|default_if_none:'[]'|json_script:"rev-ma7" }}
+
+{{ ec_top_srv_labels|default_if_none:'[]'|json_script:"top-l" }}
+{{ ec_top_srv_values|default_if_none:'[]'|json_script:"top-v" }}
+
+{{ ec_heatmap_x|default_if_none:'[]'|json_script:"hm-x" }}
+{{ ec_heatmap_y|default_if_none:'[]'|json_script:"hm-y" }}
+{{ ec_heatmap_data|default_if_none:'[]'|json_script:"hm-data" }}
+<!-- ECharts CDN -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script>
+  // Dados da view
+  const REV_LABELS = JSON.parse(document.getElementById('rev-labels').textContent);
+  const REV_VALUES = JSON.parse(document.getElementById('rev-values').textContent);
+  const REV_MA7    = JSON.parse(document.getElementById('rev-ma7').textContent);
+
+  const TOP_L = JSON.parse(document.getElementById('top-l').textContent);
+  const TOP_V = JSON.parse(document.getElementById('top-v').textContent);
+
+  const HM_X    = JSON.parse(document.getElementById('hm-x').textContent);
+  const HM_Y    = JSON.parse(document.getElementById('hm-y').textContent);
+  const HM_DATA = JSON.parse(document.getElementById('hm-data').textContent);
+
+  // Faturamento diário (linha com média móvel)
+  (function () {
+    const el = document.getElementById('ec-rev'); if (!el) return;
+    const opt = {
+      tooltip: { trigger: 'axis' },
+      grid: { left: 12, right: 12, top: 24, bottom: 40 },
+      xAxis: { type: 'category', data: REV_LABELS, axisLabel: { interval: 2 } },
+      yAxis: { type: 'value' },
+      legend: { data: ['Diário', 'MM7'] },
+      series: [
+        { name: 'Diário', type: 'line', smooth: true, data: REV_VALUES },
+        { name: 'MM7', type: 'line', smooth: true, data: REV_MA7, lineStyle: { width: 1, type: 'dashed' } }
+      ]
+    };
+    echarts.init(el).setOption(opt);
+  })();
+
+  // Top serviços (barra horizontal)
+  (function () {
+    const el = document.getElementById('ec-top-srv'); if (!el) return;
+    const opt = {
+      grid: { left: 100, right: 12, top: 24, bottom: 24 },
+      xAxis: { type: 'value' },
+      yAxis: { type: 'category', data: TOP_L },
+      series: [{ type: 'bar', data: TOP_V, barWidth: '60%' }]
+    };
+    echarts.init(el).setOption(opt);
+  })();
+
+  // Heatmap semanal
+  (function () {
+    const el = document.getElementById('ec-heatmap'); if (!el) return;
+    const opt = {
+      tooltip: { position: 'top' },
+      grid: { left: 60, right: 12, top: 20, bottom: 24 },
+      xAxis: { type: 'category', data: HM_X, splitArea: { show: true } },
+      yAxis: { type: 'category', data: HM_Y, splitArea: { show: true } },
+      visualMap: {
+        min: 0, max: 100, calculable: true, orient: 'horizontal', left: 'center', bottom: 0,
+        inRange: { color: ['#dbeafe', '#60a5fa', '#2563eb', '#1d4ed8'] }
+      },
+      series: [{ type: 'heatmap', data: HM_DATA }]
+    };
+    echarts.init(el).setOption(opt);
+  })();
+</script>
+{% endblock %}

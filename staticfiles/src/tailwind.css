@@ -2,17 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Componentes personalizados */
+/* =================== Componentes personalizados =================== */
 @layer components {
-  .card{ @apply rounded-2xl border border-slate-200 bg-white shadow-sm; }
-  .pill{ @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs; }
-  .kpi-val{ @apply mt-1 text-3xl font-bold text-slate-900; }
-  .kpi-hint{ @apply mt-1 text-xs text-slate-500; }
-  .section-title{ @apply text-sm font-semibold text-slate-900; }
-  .soft-divider{ @apply border-b border-slate-200; }
+  /* Layout / Estrutura */
+  .card { @apply rounded-2xl border border-slate-200 bg-white shadow-sm; }
+  .pill { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs; }
+  .kpi-val { @apply mt-1 text-3xl font-bold text-slate-900; }
+  .kpi-hint { @apply mt-1 text-xs text-slate-500; }
+  .section-title { @apply text-sm font-semibold text-slate-900; }
+  .soft-divider { @apply border-b border-slate-200; }
 
-  .btn{ @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition; }
-  .btn-outline{ @apply border bg-white text-slate-800 hover:bg-slate-50; }
-  .btn-primary{ @apply bg-blue-600 text-white hover:bg-blue-700 shadow-sm; }
-  .btn-amber{ @apply bg-amber-100 text-amber-800 hover:bg-amber-200; }
+  /* Botões base */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5
+           text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-1;
+  }
+
+  /* Variações de botão */
+  .btn-primary {
+    @apply bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500 shadow-sm;
+  }
+  .btn-danger {
+    @apply bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-500 shadow-sm;
+  }
+  .btn-warning {
+    @apply bg-yellow-500 text-white hover:bg-yellow-600 focus:ring-yellow-400;
+  }
+  .btn-secondary {
+    @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-400;
+  }
+  .btn-outline {
+    @apply border border-slate-300 bg-white text-slate-800 hover:bg-slate-50;
+  }
+  .btn-amber {
+    @apply bg-amber-100 text-amber-800 hover:bg-amber-200;
+  }
+
+  /* Ações menores (ícones ou botões compactos) */
+  .btn-xs {
+    @apply px-2 py-1 text-xs rounded;
+  }
+  .btn-lg {
+    @apply px-4 py-2 text-base;
+  }
 }

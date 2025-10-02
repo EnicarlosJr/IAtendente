@@ -1,48 +1,59 @@
-{# Ações para uma Solicitação (sem "CONFIRMADO" aqui) #}
+{# templates/solicitacoes/partials/acoes.html #}
 <div class="flex justify-end gap-2">
-  <a href="{% url 'solicitacoes:detalhe' shop.slug s.id %}"
-     class="btn-action border hover:bg-gray-50">Ver</a>
 
+  <a href="{% url 'solicitacoes:detalhe' shop.slug s.id %}" class="btn btn-secondary">
+    👁️ Ver
+  </a>
+
+  {# ==== Ações para PENDENTE ==== #}
   {% if s.status == "PENDENTE" %}
-    <button type="button"
-            class="btn-action bg-black text-white hover:opacity-90"
-            data-id="{{ s.id }}"
-            data-confirm-url="{% url 'solicitacoes:confirmar' shop.slug s.id %}"
-            data-deny-url="{% url 'solicitacoes:recusar' shop.slug s.id %}"
-            data-nome="{% firstof s.nome s.cliente.nome s.telefone %}"
-            data-telefone="{% firstof s.telefone s.cliente.telefone '' %}"
-            data-servico="{% firstof s.servico_label s.servico_nome s.servico.nome '' %}"
-            data-servico-id="{{ s.servico_id|default:'' }}"
-            {# preço vem da Solicitação ou do Serviço; NÃO use preco_cobrado (é de Agendamento) #}
-            data-preco="{% firstof s.preco_cotado s.servico.preco '' %}"
-            data-duracao="{% firstof s.duracao_min_cotada s.servico.duracao_min 0 %}"
-            data-inicio="{% if s.inicio %}{{ s.inicio|date:'Y-m-d\\TH:i' }}{% endif %}"
-            onclick="openConfirm(this)">
-      Confirmar
-    </button>
+    <form method="post"
+          action="{% url 'solicitacoes:confirmar' shop.slug s.id %}"
+          class="hidden"
+          id="confirm-form-{{ s.id }}">
+      {% csrf_token %}
+      <input type="hidden" name="inicio" value="{% if s.inicio %}{{ s.inicio|date:'Y-m-d\\TH:i' }}{% endif %}">
+      <input type="hidden" name="servico_id" value="{{ s.servico_id|default_if_none:'' }}">
+      <input type="hidden" name="preco_cotado"
+             value="{{ s.preco_cotado|default_if_none:s.servico.preco|default_if_none:'' }}">
+    </form>
 
     <button type="button"
-            class="btn-action bg-rose-600 text-white hover:bg-rose-700"
-            data-id="{{ s.id }}"
-            data-deny-url="{% url 'solicitacoes:recusar' shop.slug s.id %}"
-            data-cliente="{% firstof s.nome s.cliente.nome s.telefone %}"
-            onclick="openDeny(this)">
-      Negar
+            class="btn btn-primary"
+            onclick="document.getElementById('confirm-form-{{ s.id }}').submit()">
+      ✅ Confirmar
     </button>
 
+    <form method="post"
+          action="{% url 'solicitacoes:recusar' shop.slug s.id %}"
+          class="hidden"
+          id="deny-form-{{ s.id }}">
+      {% csrf_token %}
+      <input type="hidden" name="status" value="NEGADA">
+      <input type="hidden" name="motivo" value="">
+    </form>
+
+    <button type="button"
+            class="btn btn-danger"
+            onclick="if(confirm('Negar esta solicitação?')){ document.getElementById('deny-form-{{ s.id }}').submit(); }">
+      ❌ Negar
+    </button>
+
+  {# ==== Ações para CONFIRMADA ==== #}
   {% elif s.status == "CONFIRMADA" %}
-    <button type="button"
-            class="btn-action bg-emerald-600 text-white hover:bg-emerald-700"
-            data-finalize-url="{% url 'solicitacoes:finalizar' shop.slug s.id %}"
-            onclick="submitFinalize(this)">
-      Finalizar
-    </button>
+    {# Evite depender de agendamento_set. Se você mantém o vínculo, use o related_name correto:
+       {% with ag=s.agendamentos.all|slice:":1"|first %} … {% endwith %}
+       Como na sua confirmação você DESVINCULA o agendamento e depois DELETA a solicitação,
+       normalmente essa branch nem será exibida.
+    #}
+    <span class="pill bg-emerald-100 text-emerald-700">Confirmada</span>
 
-    <button type="button"
-            class="btn-action border hover:bg-gray-50"
-            data-noshow-url="{% url 'solicitacoes:no_show' shop.slug s.id %}"
-            onclick="submitNoShow(this)">
-      No-show
-    </button>
+  {# ==== NEGADA ==== #}
+  {% elif s.status == "NEGADA" %}
+    <span class="text-sm text-gray-500 italic">Negada</span>
+
+  {# ==== FINALIZADA / NO_SHOW ==== #}
+  {% elif s.status == "FINALIZADA" or s.status == "NO_SHOW" %}
+    {# Somente visualizar nessas situações #}
   {% endif %}
 </div>

@@ -1,0 +1,248 @@
+{% extends "painel/base.html" %}
+{% load l10n %}
+{% block title %}{{ cliente.nome }}{% endblock %}
+{% block header %}Cliente · {{ cliente.nome }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-6xl px-4 py-6 space-y-6">
+
+  {# ======= Header com ações ======= #}
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div class="flex items-center gap-3">
+      {% if cliente.foto_url %}
+        <img src="{{ cliente.foto_url }}" alt="Foto de {{ cliente.nome }}"
+             class="h-12 w-12 rounded-full object-cover border" />
+      {% else %}
+        <div class="h-12 w-12 rounded-full border flex items-center justify-center text-xl">👤</div>
+      {% endif %}
+      <div>
+        <div class="text-xl font-semibold">{{ cliente.nome }}</div>
+        <div class="text-sm text-gray-500">
+          {% if cliente.telefone %}📱 {{ cliente.telefone }}{% else %}—{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-2">
+      <a href="{% url 'clientes:editar' shop.slug cliente.id %}" class="btn btn-outline">✏️ Editar</a>
+
+      <form method="post" action="{% url 'clientes:corte_hoje' shop.slug cliente.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="servico" value="Corte">
+        <button class="btn btn-primary">💈 Registrar corte hoje</button>
+      </form>
+    </div>
+  </div>
+
+  {# ======= Cartões de status ======= #}
+  <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="card p-4">
+      <div class="text-sm text-gray-500">Status de recorrência</div>
+      <div class="mt-1">
+        {% if cliente.recorrencia_status == "ATIVO" %}
+          <span class="pill bg-emerald-100 text-emerald-800">● Ativo</span>
+        {% else %}
+          <span class="pill bg-amber-100 text-amber-800">● Inativo</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card p-4">
+      <div class="text-sm text-gray-500">Último corte</div>
+      <div class="mt-1 font-medium">
+        {% if cliente.ultimo_corte %}
+          {{ cliente.ultimo_corte|date:"d/m/Y H:i" }}
+        {% else %}
+          — nunca registrado
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card p-4">
+      <div class="text-sm text-gray-500">Dias sem visita</div>
+      <div class="mt-1 font-medium">
+        {% if dias_sem_visita is not None %}
+          {{ dias_sem_visita }} dia{% if dias_sem_visita != 1 %}s{% endif %}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+      {% if cutoff_dias %}
+        <div class="text-xs text-gray-500 mt-1">Corte para ficar inativo: {{ cutoff_dias }} dias</div>
+      {% endif %}
+    </div>
+
+    <div class="card p-4">
+      <div class="text-sm text-gray-500">Próximo retorno sugerido</div>
+      <div class="mt-1 font-medium">
+        {% if prox_retorno_sugerido %}
+          {{ prox_retorno_sugerido|date:"d/m/Y" }}
+        {% else %}
+          —
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  {# ======= Preferências e dados extras ======= #}
+  {% if cliente.preferencias or cliente.tags or cliente.barbeiro_preferido %}
+  <section class="card p-4">
+    <h2 class="section-title mb-3">🧩 Preferências e extras</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      <div>
+        <div class="text-gray-500 mb-1">Barbeiro preferido</div>
+        <div class="font-medium">{% if cliente.barbeiro_preferido %}{{ cliente.barbeiro_preferido }}{% else %}—{% endif %}</div>
+      </div>
+      <div>
+        <div class="text-gray-500 mb-1">Tags</div>
+        <div class="flex flex-wrap gap-1">
+          {% if cliente.tags %}
+            {% for t in cliente.tags %}
+              <span class="pill bg-slate-100 text-slate-700">#{{ t }}</span>
+            {% empty %}
+              <span class="text-gray-500">—</span>
+            {% endfor %}
+          {% else %}
+            <span class="text-gray-500">—</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="md:col-span-3">
+        <div class="text-gray-500 mb-1">Preferências</div>
+        <div class="whitespace-pre-wrap">{% if cliente.preferencias %}{{ cliente.preferencias }}{% else %}—{% endif %}</div>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  {# ======= Histórico recente + adicionar item ======= #}
+  <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="lg:col-span-2 card overflow-hidden">
+      <div class="p-4 border-b">
+        <h2 class="section-title">🗂️ Histórico recente</h2>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-left">
+            <tr>
+              <th class="px-4 py-3 font-semibold">Data</th>
+              <th class="px-4 py-3 font-semibold">Serviço</th>
+              <th class="px-4 py-3 font-semibold">Profissional</th>
+              <th class="px-4 py-3 font-semibold">Preço</th>
+              <th class="px-4 py-3 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for it in historico %}
+              <tr class="hover:bg-gray-50">
+                <td class="px-4 py-3">{{ it.data|date:"d/m/Y H:i" }}</td>
+                <td class="px-4 py-3">
+                  {% if it.servico_ref_id %}
+                    {{ it.servico_ref.nome }}
+                  {% else %}
+                    {{ it.servico }}
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3">
+                  {% if it.profissional %}{{ it.profissional }}{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-3">
+                  {% if it.valor is not None %}R$ {{ it.valor|floatformat:2|localize }}{% else %}—{% endif %}
+                </td>
+                <td class="px-4 py-3">
+                  {% if it.faltou %}
+                    <span class="pill bg-amber-100 text-amber-800">No-show</span>
+                  {% else %}
+                    <span class="pill bg-emerald-100 text-emerald-800">Realizado</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="5" class="px-4 py-10 text-center text-gray-500">
+                  Sem histórico ainda.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="p-3 text-xs text-gray-500 border-t">
+        Mostrando até 20 últimos registros.
+      </div>
+    </div>
+
+    <div class="card p-4">
+      <h2 class="section-title mb-3">➕ Adicionar histórico</h2>
+      <form method="post" action="{% url 'clientes:add_historico' shop.slug cliente.id %}" class="space-y-3">
+        {% csrf_token %}
+
+        {# Render "puro" para não depender de filtros customizados. Ajuste conforme os campos do seu HistoricoItemForm #}
+        {% if form_hist.non_field_errors %}
+          <div class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
+            {{ form_hist.non_field_errors }}
+          </div>
+        {% endif %}
+
+        <div>
+          {{ form_hist.data.label_tag }} {{ form_hist.data }}
+          {{ form_hist.data.errors }}
+          <div class="text-xs text-gray-500">Data/hora do atendimento.</div>
+        </div>
+
+        {% if form_hist.servico_ref %}
+          <div>
+            {{ form_hist.servico_ref.label_tag }} {{ form_hist.servico_ref }}
+            {{ form_hist.servico_ref.errors }}
+            <div class="text-xs text-gray-500">Opcional: vincular ao serviço do catálogo.</div>
+          </div>
+        {% endif %}
+
+        {% if form_hist.servico %}
+          <div>
+            {{ form_hist.servico.label_tag }} {{ form_hist.servico }}
+            {{ form_hist.servico.errors }}
+            <div class="text-xs text-gray-500">Nome do serviço (usado se não selecionar do catálogo).</div>
+          </div>
+        {% endif %}
+
+        {% if form_hist.valor %}
+          <div>
+            {{ form_hist.valor.label_tag }} {{ form_hist.valor }}
+            {{ form_hist.valor.errors }}
+          </div>
+        {% endif %}
+
+        {% if form_hist.preco_tabela %}
+          <div>
+            {{ form_hist.preco_tabela.label_tag }} {{ form_hist.preco_tabela }}
+            {{ form_hist.preco_tabela.errors }}
+          </div>
+        {% endif %}
+
+        {% if form_hist.profissional %}
+          <div>
+            {{ form_hist.profissional.label_tag }} {{ form_hist.profissional }}
+            {{ form_hist.profissional.errors }}
+          </div>
+        {% endif %}
+
+        {% if form_hist.faltou %}
+          <div class="flex items-center gap-2">
+            {{ form_hist.faltou }} {{ form_hist.faltou.label_tag }}
+            {{ form_hist.faltou.errors }}
+          </div>
+        {% endif %}
+
+        <button class="btn btn-primary w-full">Salvar histórico</button>
+      </form>
+      <p class="text-xs text-gray-500 mt-2">
+        Dica: ao registrar um histórico sem “faltou”, o sistema atualiza automaticamente o “Último corte” e o status do cliente.
+      </p>
+    </div>
+  </section>
+
+</div>
+{% endblock %}

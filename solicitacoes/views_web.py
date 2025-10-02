@@ -1,4 +1,4 @@
-# solicitacoes/views_web.py
+# solicitacoes/views_web.py  (trechos principais atualizados)
 
 import logging
 from decimal import Decimal
@@ -6,41 +6,85 @@ from decimal import Decimal
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render, redirect
 from django.contrib import messages
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_protect
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
-import requests
-from django.contrib.auth import get_user_model
-from barbearias.models import BarberShop
-from agendamentos.models import Agendamento, StatusAgendamento
-from servicos.models import Servico
-from core import settings
-from .models import Solicitacao, SolicitacaoStatus
 from django.contrib.auth.decorators import login_required
-from django.http import Http404
+from django.contrib.auth import get_user_model
+
+import requests
+from core import settings
+from barbearias.models import BarberShop, Membership, MembershipRole
+from agendamentos.models import Agendamento, StatusAgendamento
+from core.access import require_shop_member
+from painel.visibility import is_shop_admin, scope_agendamentos_qs, scope_solicitacoes_qs
+from servicos.models import Servico
+from solicitacoes.helpers import criar_agendamento_from_solicitacao
+from solicitacoes.utils import shop_post_view
+from .models import Solicitacao, SolicitacaoStatus
 
 logger = logging.getLogger(__name__)
 
+# ===================== Helpers de acesso =====================
 
-# ----------------- Helpers -----------------
-def _get_shop(request, shop_slug):
-    return getattr(request, "shop", None) or get_object_or_404(BarberShop, slug=shop_slug)
+def _user_membership(user, shop) -> Membership | None:
+    if not (user and user.is_authenticated and shop):
+        return None
+    return Membership.objects.filter(shop=shop, user=user, is_active=True).first()
+
+def _get_shop_for_user(request, shop_slug) -> BarberShop:
+    """
+    Recupera a barbearia pelo slug e **só retorna** se o usuário atual
+    for membro ativo dessa barbearia. Caso contrário -> 404.
+    """
+    shop = get_object_or_404(BarberShop, slug=shop_slug)
+    mem = _user_membership(request.user, shop)
+    if not mem:
+        # 404 para não vazar a existência/nomes de barbearias alheias
+        raise Http404("Barbearia não encontrada.")
+    # opcional: deixar à mão no request
+    request.shop = shop
+    request.membership = mem
+    return shop
+
+def _is_manager(request) -> bool:
+    mem = getattr(request, "membership", None)
+    return bool(mem and mem.role in (MembershipRole.OWNER, MembershipRole.MANAGER))
+
+def _barber_can_act(request, solicitacao: Solicitacao) -> bool:
+    """
+    Barbeiro comum só pode agir se:
+      - solicitacao.barbeiro == request.user, ou
+      - solicitacao não tem barbeiro definido ainda (libera para quem está logado, membro).
+    """
+    if _is_manager(request):
+        return True
+    if not request.user.is_authenticated:
+        return False
+    if solicitacao.barbeiro_id:
+        return solicitacao.barbeiro_id == request.user.id
+    return True
+
+# ===================== Helpers já existentes =====================
 
 def _wants_json(request) -> bool:
-    xrw = (request.headers.get("x-requested-with") or "").lower()
-    accept = (request.headers.get("Accept") or "").lower()
-    return xrw == "xmlhttprequest" or "application/json" in accept
+    # retorna JSON se vier AJAX ou se o client pedir application/json
+    accept = request.headers.get("Accept", "")
+    return (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or "application/json" in accept
+        or request.GET.get("format") == "json"
+    )
 
 def _solicitacao_qs(shop):
     return (Solicitacao.objects
             .filter(shop=shop)
             .select_related("cliente", "servico"))
-
 
 def _parse_inicio(inicio_str: str):
     dt = parse_datetime((inicio_str or "").strip())
@@ -53,7 +97,6 @@ def _agendamento_qs(shop):
             .filter(shop=shop)
             .select_related("cliente", "servico", "barbeiro"))
 
-# ----------------- Aplica snapshots de serviço -----------------
 def _aplicar_snapshots_de_servico(s: Solicitacao, servico: Servico | None):
     if not servico:
         return
@@ -65,27 +108,26 @@ def _aplicar_snapshots_de_servico(s: Solicitacao, servico: Servico | None):
     if not s.duracao_min_cotada and getattr(servico, "duracao_min", None):
         s.duracao_min_cotada = servico.duracao_min
 
-# ----------------- Cria Agendamento -----------------
+@login_required
+@require_shop_member
 def _criar_agendamento_para_solicitacao(s: Solicitacao, barbeiro=None) -> Agendamento:
-    cliente_nome = s.nome or (getattr(s.cliente, "nome", None) or (s.telefone or ""))
-    ag = Agendamento.objects.create(
-        shop=s.shop,
-        solicitacao=s,
-        cliente=s.cliente,
-        cliente_nome=cliente_nome,
-        barbeiro=barbeiro or s.barbeiro,  # 👈 força o barbeiro resolvido
-        servico=s.servico,
-        servico_nome=s.servico_label,
-        preco_cobrado=s.preco_praticado(),
-        inicio=s.inicio,
-        fim=s.fim,  # Agendamento.calcular_fim_pelo_servico cobre quando houver servico
-        status=StatusAgendamento.CONFIRMADO,
-        observacoes=s.observacoes or "",
-    )
+    ag = Agendamento.objects.filter(shop=s.shop, solicitacao=s).first()
+    if not ag:
+        ag = Agendamento(shop=s.shop, solicitacao=s)
+
+    ag.cliente = s.cliente
+    ag.cliente_nome = s.nome or (getattr(s.cliente, "nome", None) or (s.telefone or ""))
+    ag.barbeiro = barbeiro or s.barbeiro
+    ag.servico = s.servico
+    ag.servico_nome = s.servico_label
+    ag.preco_cobrado = s.preco_praticado()
+    ag.inicio = s.inicio
+    ag.fim = s.fim
+    ag.status = StatusAgendamento.CONFIRMADO
+    ag.observacoes = s.observacoes or ""
+    ag.save()
     return ag
 
-
-# ----------------- Webhook de confirmação -----------------
 def _disparar_webhook_confirmacao(s: Solicitacao):
     callback_url = s.callback_url or getattr(settings, "OUTBOUND_CONFIRMATION_WEBHOOK", None)
     if not callback_url:
@@ -119,51 +161,107 @@ def _disparar_webhook_confirmacao(s: Solicitacao):
 
     transaction.on_commit(lambda: _send(callback_url, payload, headers))
 
-
-# ----------------- Listagem -----------------
+# ===================== Listagem =====================
+@require_shop_member
+@login_required
 def solicitacoes(request, shop_slug):
-    shop = _get_shop(request, shop_slug)
-    qs = _solicitacao_qs(shop).order_by("-criado_em")
-
+    shop = _get_shop_for_user(request, shop_slug)
     q = (request.GET.get("q") or "").strip()
-    status_ = (request.GET.get("status") or "").strip()
+    status_raw = request.GET.get("status")
+    status_ = (status_raw or "").strip().upper()
+    has_status_param = ("status" in request.GET)
+
+    admin = _is_manager(request)
+
+    def paginar(qs):
+        return Paginator(qs, 20).get_page(request.GET.get("page"))
+
+    map_ag = {
+        "CONFIRMADA": StatusAgendamento.CONFIRMADO,
+        "FINALIZADA": getattr(StatusAgendamento, "FINALIZADO", getattr(StatusAgendamento, "REALIZADO", None)),
+        "REALIZADA":  getattr(StatusAgendamento, "REALIZADO", None),
+        "NO_SHOW":    getattr(StatusAgendamento, "NO_SHOW", StatusAgendamento.CANCELADO),
+        "CANCELADA":  getattr(StatusAgendamento, "NO_SHOW", StatusAgendamento.CANCELADO),
+    }
+
+    # --- Agendamentos por status ---
+    if status_ in map_ag:
+        ag_status = map_ag[status_]
+        aq = (_agendamento_qs(shop))
+        aq = scope_agendamentos_qs(aq, request.user, admin)
+
+        if ag_status is not None:
+            aq = aq.filter(status=ag_status)
+
+        if q:
+            aq = aq.filter(
+                Q(cliente_nome__icontains=q) |
+                Q(cliente__nome__icontains=q) |
+                Q(servico_nome__icontains=q) |
+                Q(servico__nome__icontains=q)
+            )
+
+        page_obj = paginar(aq.order_by("-inicio"))
+        pendentes_count = scope_solicitacoes_qs(
+            Solicitacao.objects.filter(shop=shop, status=SolicitacaoStatus.PENDENTE),
+            request.user, admin, incluir_nao_atribuida=True
+        ).count()
+
+        return render(request, "painel/solicitacoes.html", {
+            "title": "Solicitações",
+            "shop": shop,
+            "list_kind": "agendamentos",
+            "agendamentos": page_obj,
+            "page_obj": page_obj,
+            "filters": {"q": q, "status": status_},
+            "alertas": {
+                "sem_confirmacao": pendentes_count,
+                "inativos_30d": 0,
+                "solicitacoes_pendentes": pendentes_count,
+            },
+            "solicitacoes_pendentes_count": pendentes_count,
+        })
+
+    # --- Solicitações ---
+    sq = (_solicitacao_qs(shop).order_by("-criado_em"))
+    sq = scope_solicitacoes_qs(sq, request.user, admin, incluir_nao_atribuida=True)
 
     if q:
-        qs = qs.filter(Q(nome__icontains=q) | Q(telefone__icontains=q))
-    if status_:
-        qs = qs.filter(status=status_)
+        sq = sq.filter(Q(nome__icontains=q) | Q(telefone__icontains=q))
 
-    paginator = Paginator(qs, 20)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    if has_status_param:
+        sq = sq.filter(status=status_) if status_ else sq
+        selected_status = status_
+    else:
+        sq = sq.filter(status=SolicitacaoStatus.PENDENTE)
+        selected_status = SolicitacaoStatus.PENDENTE
 
-    pendentes_count = _solicitacao_qs(shop).filter(status=SolicitacaoStatus.PENDENTE).count()
+    page_obj = Paginator(sq, 20).get_page(request.GET.get("page"))
+    pendentes_count = scope_solicitacoes_qs(
+        Solicitacao.objects.filter(shop=shop, status=SolicitacaoStatus.PENDENTE),
+        request.user, admin, incluir_nao_atribuida=True
+    ).count()
 
-    ctx = {
+    return render(request, "painel/solicitacoes.html", {
         "title": "Solicitações",
         "shop": shop,
+        "list_kind": "solicitacoes",
         "solicitacoes": page_obj,
         "page_obj": page_obj,
-        "filters": {"q": q, "status": status_},
+        "filters": {"q": q, "status": selected_status},
         "alertas": {
             "sem_confirmacao": pendentes_count,
             "inativos_30d": 0,
             "solicitacoes_pendentes": pendentes_count,
         },
         "solicitacoes_pendentes_count": pendentes_count,
-    }
-    return render(request, "painel/solicitacoes.html", ctx)
+    })
 
-
-# ----------------- Detalhe/Editar -----------------
+# ===================== Detalhe =====================
+@require_shop_member
 @login_required
 def detalhe(request, shop_slug, pk):
-    """
-    Detalhe unificado:
-      - Tenta carregar Solicitacao(pk) na barbearia.
-      - Se não existir, tenta Agendamento(pk) na barbearia.
-      - Renderiza o mesmo template com 'tipo' no contexto.
-    """
-    shop = _get_shop(request, shop_slug)
+    shop = _get_shop_for_user(request, shop_slug)
 
     s = _solicitacao_qs(shop).filter(pk=pk).first()
     a = None
@@ -172,7 +270,6 @@ def detalhe(request, shop_slug, pk):
     if not s:
         a = _agendamento_qs(shop).filter(pk=pk).first()
         if not a:
-            # 404 mais explícito que “No Solicitacao matches…”
             raise Http404("Nenhuma Solicitação ou Agendamento encontrado para este ID nesta barbearia.")
         tipo = "agendamento"
 
@@ -182,120 +279,101 @@ def detalhe(request, shop_slug, pk):
         "shop": shop,
         "servicos": servicos,
         "tipo": tipo,
-        "obj": s or a,                # objeto atual (unificado)
-        "solicitacao": s,             # mantém compatibilidade com templates antigos
-        "agendamento": a,             # idem
-        "now": timezone.now(),        # útil para badges relativos
+        "obj": s or a,
+        "solicitacao": s,
+        "agendamento": a,
+        "now": timezone.now(),
     }
     return render(request, "solicitacoes/detalhe.html", ctx)
 
-# -------- NOVO HELPER: resolve o barbeiro de acordo com o usuário logado --------
+# ===================== Ações rápidas =====================
+
+@require_POST
+@csrf_protect
+@login_required
+@transaction.atomic
+def alterar_status(request, shop_slug, pk: int):
+    shop = _get_shop_for_user(request, shop_slug)
+    s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
+    if not _barber_can_act(request, s):
+        return HttpResponseForbidden("Você não tem permissão para alterar esta solicitação.")
+
+    novo = (request.POST.get("status") or "").strip()
+    if novo not in (SolicitacaoStatus.PENDENTE, SolicitacaoStatus.NEGADA):
+        messages.error(request, "Status inválido.")
+        return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
+
+    if novo == SolicitacaoStatus.NEGADA:
+        motivo = (request.POST.get("motivo") or "").strip()
+        s.negar(motivo=motivo)
+        messages.success(request, "Solicitação negada.")
+    else:
+        s.status = SolicitacaoStatus.PENDENTE
+        s.save(update_fields=["status", "updated_at"])
+        messages.success(request, "Solicitação reaberta.")
+
+    return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
+
 def _resolve_barbeiro_para_agendamento(request, shop: BarberShop, solicitacao: Solicitacao):
-    """
-    Regras:
-    - Admin (staff/superuser): pode escolher barbeiro via POST 'barbeiro'/'barbeiro_id'.
-    - Barbeiro comum: sempre ele mesmo (request.user).
-    - Se nada for possível, cai para o barbeiro já setado na solicitação, se houver.
-    """
     User = get_user_model()
     user = request.user if request.user.is_authenticated else None
-    is_admin = bool(user and (user.is_staff or user.is_superuser))
+    is_admin = _is_manager(request)
 
-    # já vem escolhido na solicitação?
-    if solicitacao.barbeiro_id:
-        chosen = solicitacao.barbeiro
-    else:
-        chosen = None
+    chosen = solicitacao.barbeiro if solicitacao.barbeiro_id else None
 
-    # Admin pode escolher
     if is_admin:
         barber_param = (request.POST.get("barbeiro") or request.POST.get("barbeiro_id") or "").strip()
         if barber_param.isdigit():
             try:
                 candidate = User.objects.get(pk=int(barber_param))
-                # (Opcional) se você tiver uma relação de membros da barbearia, valide aqui.
-                # Ex.: if not shop.membros.filter(pk=candidate.pk).exists(): raise
                 chosen = candidate
             except User.DoesNotExist:
                 pass
-
-    # Barbeiro comum → força ser ele mesmo
-    if not is_admin and user:
+    elif user:
         chosen = user
 
     return chosen
 
+def _next_url_from_request(request, fallback: str) -> str:
+    return (
+        request.POST.get("next")
+        or request.GET.get("next")
+        or request.META.get("HTTP_REFERER")
+        or fallback
+    )
 
-# ----------------- Alterar status rápido -----------------
-@require_POST
-@csrf_protect
-@transaction.atomic
-def alterar_status(request, shop_slug, pk: int):
-    shop = _get_shop(request, shop_slug)
-    s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
-    novo = (request.POST.get("status") or "").strip()
-
-    if novo not in (SolicitacaoStatus.PENDENTE, SolicitacaoStatus.CONFIRMADA, SolicitacaoStatus.NEGADA):
-        messages.error(request, "Status inválido.")
-        return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
-
-    if novo == SolicitacaoStatus.CONFIRMADA:
-        dt = _parse_inicio(request.POST.get("inicio"))
-        if not dt:
-            messages.error(request, "Informe a data/hora de início para confirmar.")
-            return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
-
-        servico_id = (request.POST.get("servico_id") or "").strip()
-        if servico_id.isdigit():
-            try:
-                serv = Servico.objects.get(pk=int(servico_id), shop=shop)
-                _aplicar_snapshots_de_servico(s, serv)
-            except Servico.DoesNotExist:
-                pass
-
-        preco_str = (request.POST.get("preco_cotado") or "").strip().replace(",", ".")
-        if preco_str:
-            try:
-                s.preco_cotado = Decimal(preco_str)
-            except Exception:
-                s.preco_cotado = None
-
-        s.confirmar(dt)
-        barbeiro_final = _resolve_barbeiro_para_agendamento(request, shop, s)
-        _criar_agendamento_para_solicitacao(s, barbeiro=barbeiro_final)
-
-        messages.success(request, "Solicitação confirmada e agendamento criado.")
-        return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
-
-    elif novo == SolicitacaoStatus.NEGADA:
-        s.negar()
-    else:
-        s.status = SolicitacaoStatus.PENDENTE
-        s.save(update_fields=["status", "updated_at"])
-
-    messages.success(request, "Status atualizado.")
-    return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
-
-
-# ----------------- Confirmar -> cria Agendamento -----------------
+# ===================== Confirmar / Recusar =====================
+@require_shop_member
+@login_required
 @require_POST
 @csrf_protect
 @transaction.atomic
 def confirmar_solicitacao(request, shop_slug, pk: int):
-    """
-    Confirma a Solicitação e cria um Agendamento CONFIRMADO.
-    - Admin pode escolher o barbeiro (POST 'barbeiro'/'barbeiro_id').
-    - Barbeiro comum só pode confirmar para si.
-    """
-    shop = _get_shop(request, shop_slug)
-    s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
+    shop = _get_shop_for_user(request, shop_slug)
+    s = get_object_or_404(_solicitacao_qs(shop).select_for_update(), pk=pk)
 
-    # INÍCIO obrigatório
-    dt = _parse_inicio(request.POST.get("inicio"))
+    if not _barber_can_act(request, s):
+        # HTML normal: volta com msg; JSON: 403
+        if _wants_json(request):
+            return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+        messages.error(request, "Você não tem permissão para confirmar esta solicitação.")
+        fb = reverse("agendamentos:agenda_dia", args=[shop.slug])
+        return redirect(_next_url_from_request(request, fb))
+
+    # data/hora
+    dt = _parse_inicio(request.POST.get("inicio")) or s.inicio
     if not dt:
-        return JsonResponse({"ok": False, "error": "inicio_obrigatorio"}, status=400)
+        if _wants_json(request):
+            return JsonResponse(
+                {"ok": False, "error": "inicio_obrigatorio",
+                 "detail": "Defina a data/hora na solicitação antes de confirmar."},
+                status=400
+            )
+        messages.error(request, "Defina a data/hora na solicitação antes de confirmar.")
+        fb = reverse("agendamentos:agenda_dia", args=[shop.slug])
+        return redirect(_next_url_from_request(request, fb))
 
-    # (opcionais) atualizar serviço/preço/snapshots
+    # snapshots opcionais
     servico_id = (request.POST.get("servico_id") or "").strip()
     if servico_id.isdigit():
         try:
@@ -315,92 +393,62 @@ def confirmar_solicitacao(request, shop_slug, pk: int):
     if callback_override:
         s.callback_url = callback_override
 
-    # 1) confirma a solicitação
+    # 1) confirma a solicitação (mantém sua lógica)
     s.confirmar(dt)
 
-    # 2) resolve barbeiro conforme regra (admin escolhe; barbeiro comum = self)
+    # 2) cria o agendamento CONFIRMADO (mantém seu helper)
     barbeiro_final = _resolve_barbeiro_para_agendamento(request, shop, s)
+    agendamento = criar_agendamento_from_solicitacao(s, barbeiro=barbeiro_final)
 
-    # 3) cria o agendamento confirmado
-    agendamento = _criar_agendamento_para_solicitacao(s, barbeiro=barbeiro_final)
-
-    # 4) webhook (se configurado)
+    # 3) dispara o webhook (não bloqueie UX caso dê erro)
     _disparar_webhook_confirmacao(s)
 
-    return JsonResponse({
-        "ok": True,
-        "id": s.id,
-        "status": s.status,
-        "inicio": s.inicio.isoformat() if s.inicio else None,
-        "fim": s.fim.isoformat() if s.fim else None,
-        "servico": s.servico_label,
-        "servico_id": s.servico_id,
-        "agendamento_id": agendamento.id,
-        "barbeiro_id": agendamento.barbeiro_id,
-        "mensagem": "Solicitação confirmada e agendamento criado.",
-    })
+    # 4) descarta o vínculo e remove a solicitação (sua lógica original)
+    if agendamento.solicitacao_id:
+        agendamento.solicitacao = None
+        agendamento.save(update_fields=["solicitacao"])
+    s.delete()
 
-# ----------------- Recusar -----------------
+    # 5) resposta
+    if _wants_json(request):
+        return JsonResponse({
+            "ok": True,
+            "agendamento_id": agendamento.id,
+            "barbeiro_id": agendamento.barbeiro_id,
+            "inicio": agendamento.inicio.isoformat() if agendamento.inicio else None,
+            "fim": agendamento.fim.isoformat() if agendamento.fim else None,
+            "servico": agendamento.servico_nome,
+            "mensagem": "Solicitação confirmada, agendamento criado e solicitação removida."
+        })
+
+    # HTML normal: volta para onde estava e já recarrega a agenda
+    messages.success(request, "Solicitação confirmada ✅")
+    # se conhecemos o dia, fazemos fallback para Agenda do Dia correspondente
+    if agendamento.inicio:
+        day_url = f"{reverse('agendamentos:agenda_dia', args=[shop.slug])}?dia={agendamento.inicio.date().isoformat()}"
+    else:
+        day_url = reverse('agendamentos:agenda_dia', args=[shop.slug])
+
+    return redirect(_next_url_from_request(request, day_url))
+
+
+
 @require_POST
-@csrf_exempt   # se quiser receber de fora
+@csrf_protect
+@login_required
 @transaction.atomic
 def recusar_solicitacao(request, shop_slug, pk: int):
-    shop = _get_shop(request, shop_slug)
+    shop = _get_shop_for_user(request, shop_slug)
     s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
+
+    if not _barber_can_act(request, s):
+        return HttpResponseForbidden("Você não tem permissão para recusar esta solicitação.")
+
     motivo = (request.POST.get("motivo") or "").strip()
-
-    obs = (s.observacoes or "").strip()
-    if motivo:
-        obs = (obs + ("\n" if obs else "") + f"[NEGADA] {motivo}").strip()
-        s.observacoes = obs
-
-    s.status = SolicitacaoStatus.NEGADA
-    s.save(update_fields=["status", "observacoes", "updated_at"])
+    s.negar(motivo=motivo)
 
     if _wants_json(request):
         return JsonResponse({"ok": True, "id": s.id, "status": s.status, "motivo": motivo or None})
 
     messages.success(request, "Solicitação negada.")
-    return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
-
-
-# ----------------- Finalizar -----------------
-@require_POST
-@csrf_protect
-@transaction.atomic
-def finalizar_solicitacao(request, shop_slug, pk: int):
-    """
-    Mantido para compatibilidade: marca a solicitação como REALIZADA e lança histórico.
-    (O agendamento, se existir, você pode atualizar em outra view do app de agenda.)
-    """
-    shop = _get_shop(request, shop_slug)
-    s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
-    try:
-        s.realizar()
-    except ValueError as e:
-        if _wants_json(request):
-            return JsonResponse({"ok": False, "error": "invalid_state", "detail": str(e)}, status=400)
-        messages.error(request, str(e))
-        return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
-
-    if _wants_json(request):
-        return JsonResponse({"ok": True, "id": s.id, "status": s.status})
-
-    messages.success(request, "Serviço finalizado e lançado no histórico.")
-    return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
-
-
-# ----------------- No-show -----------------
-@require_POST
-@csrf_protect
-@transaction.atomic
-def marcar_no_show(request, shop_slug, pk: int):
-    shop = _get_shop(request, shop_slug)
-    s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
-    s.marcar_no_show()
-
-    if _wants_json(request):
-        return JsonResponse({"ok": True, "id": s.id, "no_show": True})
-
-    messages.success(request, "Cliente marcado como no-show.")
     return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")

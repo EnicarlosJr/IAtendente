@@ -1,17 +1,17 @@
-{# templates/solicitacoes/partials/_status_badge.html #}
 {% with s=status|stringformat:"s"|upper lb=label|default:status sz=size|default:"xs" %}
-  <span
-    class="inline-flex items-center rounded-full font-medium
-           {% if sz == 'sm' %}px-3 py-1 text-xs{% else %}px-2 py-0.5 text-[11px]{% endif %}
-           {% if s in 'CONFIRMADA CONFIRMADO REALIZADA' %}
-             bg-emerald-100 text-emerald-700
-           {% elif s == 'PENDENTE' %}
-             bg-amber-100 text-amber-700
-           {% elif s in 'NEGADA CANCELADA NO_SHOW' %}
-             bg-rose-100 text-rose-700
-           {% else %}
-             bg-gray-100 text-gray-700
-           {% endif %}">
+  <span class="inline-flex items-center rounded-full font-medium
+               {% if sz == 'sm' %}px-3 py-1 text-xs{% else %}px-2 py-0.5 text-[11px]{% endif %}
+               {% if s == 'CONFIRMADA' or s == 'CONFIRMADO' %}
+                 bg-emerald-100 text-emerald-700
+               {% elif s == 'PENDENTE' %}
+                 bg-amber-100 text-amber-700
+               {% elif s == 'FINALIZADA' or s == 'REALIZADA' %}
+                 bg-emerald-50 text-emerald-700
+               {% elif s == 'NEGADA' or s == 'CANCELADA' or s == 'NO_SHOW' %}
+                 bg-rose-100 text-rose-700
+               {% else %}
+                 bg-gray-100 text-gray-700
+               {% endif %}">
     {{ lb }}
   </span>
 {% endwith %}

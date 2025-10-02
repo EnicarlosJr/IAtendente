@@ -5,117 +5,115 @@
 {% block content %}
 {% include "agendamentos/_agenda_tabs.html" %}
 
-<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+<div class="card overflow-hidden">
 
   <!-- Cabeçalho -->
-  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-4 py-3 border-b border-gray-200">
-    <div class="font-semibold text-lg">📅 Semana: {{ wk_start|date:"d/M" }} — {{ wk_end|date:"d/M" }}</div>
-    <div class="flex gap-2">
-      <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-5 sm:px-6 py-4 border-b border-slate-200 bg-slate-50/70 backdrop-blur">
+    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-blue-100 text-blue-600">📅</span>
+      Semana: {{ wk_start|date:"d/M" }} — {{ wk_end|date:"d/M" }}
+    </h2>
+
+    <div class="flex items-center gap-2">
+      <a class="btn btn-secondary"
          href="{% url 'agendamentos:agenda_semana' shop.slug %}?data={{ prev_week|date:'Y-m-d' }}">← Semana anterior</a>
-      <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+      <a class="btn btn-secondary"
          href="{% url 'agendamentos:agenda_semana' shop.slug %}?data={{ next_week|date:'Y-m-d' }}">Próxima semana →</a>
     </div>
   </div>
 
   <!-- Legenda -->
-  <div class="px-4 py-2 border-b border-gray-100">
-    <div class="flex flex-wrap items-center gap-2 text-xs">
-      <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Livre</span>
-      <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Almoço</span>
-      <span class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Folga</span>
-      <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">Ocupado</span>
-      <span class="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900">Agendamento</span>
-      <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Conflito</span>
+  <div class="px-5 sm:px-6 py-2 border-b border-slate-100 bg-white">
+    <div class="flex flex-wrap items-center gap-2 text-[11px]">
+      <span class="pill bg-emerald-100 text-emerald-800">Livre</span>
+      <span class="pill bg-amber-100 text-amber-800">Almoço</span>
+      <span class="pill bg-slate-200 text-slate-700">Folga</span>
+      <span class="pill bg-gray-100 text-gray-700">Ocupado</span>
+      <span class="pill bg-blue-100 text-blue-700">Confirmado</span>
+      <span class="pill bg-rose-100 text-rose-700">Cancelado/Negado</span>
+      <span class="pill bg-amber-100 text-amber-800">Pendente</span>
     </div>
   </div>
 
-  <!-- Grade principal (scroll em telas menores) -->
+  <!-- Grade principal -->
   <div class="overflow-x-auto">
-    <div class="min-w-[900px]">
+    <div class="min-w-[980px]">
+
       <!-- Cabeçalho dos dias -->
-      <div class="grid grid-cols-8 bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-600">
+      <div class="grid grid-cols-8 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-600">
         <div class="py-2 px-3">Hora</div>
         {% for col in days_ctx %}
           <div class="py-2 text-center">
-            {{ col.label }}<br>
-            <span class="text-[11px] text-gray-500">{{ col.date|date:"d/M" }}</span>
+            <div>{{ col.label }}</div>
+            <div class="text-[11px] text-slate-500">{{ col.date|date:"d/M" }}</div>
           </div>
         {% endfor %}
       </div>
 
       <!-- Linhas de horários -->
       {% for r in rows %}
-        <div class="grid grid-cols-8 border-b border-gray-100 text-xs">
+        <div class="grid grid-cols-8 border-b border-slate-100 text-xs">
           <!-- Coluna da hora -->
-          <div class="px-3 py-2 text-gray-600 font-medium">{{ r.time|date:"H:i" }}</div>
+          <div class="px-3 py-2 text-slate-600 font-semibold">{{ r.time|date:"H:i" }}</div>
 
-          <!-- Colunas de cada dia -->
+          <!-- Colunas/dias -->
           {% for c in r.cells %}
-            <div class="px-2 py-2 border-l border-gray-50">
+            <div class="px-2 py-2 border-l border-slate-50">
               {% if c.item %}
                 {% with status_code=c.item.status|stringformat:"s"|upper %}
-                  <!-- Agendamento -->
-                  <div class="rounded-lg border border-emerald-200 bg-emerald-50/60 p-2 shadow-sm">
+                  <a href="{% url 'solicitacoes:detalhe' shop.slug c.item.id %}"
+                     class="block rounded-xl border p-3 shadow-sm hover:shadow-md hover:border-slate-300 transition transform hover:-translate-y-0.5
+                           {% if status_code in 'CONFIRMADA CONFIRMADO' %} border-blue-200 bg-blue-50/60
+                           {% elif status_code == 'PENDENTE' %}        border-amber-200 bg-amber-50/60
+                           {% elif status_code in 'NEGADA CANCELADA' %} border-rose-200 bg-rose-50/60
+                           {% else %}                                   border-slate-200 bg-white {% endif %}">
                     <div class="flex items-center justify-between gap-2">
-                      <div class="text-[11px] text-gray-500">
+                      <div class="text-[11px] ia-text-muted">
                         {{ c.item.inicio|date:"H:i" }}–{{ c.item.fim|date:"H:i" }}
                       </div>
-                      <span class="inline-block text-[11px] px-2 py-0.5 rounded-full
-                        {% if status_code in "CONFIRMADA CONFIRMADO" %}
-                          bg-emerald-100 text-emerald-700
-                        {% elif status_code == "PENDENTE" %}
-                          bg-amber-100 text-amber-700
-                        {% elif status_code in "NEGADA CANCELADA" %}
-                          bg-rose-100 text-rose-700
-                        {% else %}
-                          bg-gray-100 text-gray-700
-                        {% endif %}"
-                        title="Status: {{ c.item.status }}">
+                      <span class="pill text-[11px] font-medium
+                        {% if status_code in 'CONFIRMADA CONFIRMADO' %} bg-blue-100 text-blue-700
+                        {% elif status_code == 'PENDENTE' %}            bg-amber-100 text-amber-800
+                        {% elif status_code in 'NEGADA CANCELADA' %}     bg-rose-100 text-rose-700
+                        {% else %}                                       bg-slate-100 text-slate-700 {% endif %}">
                         {{ c.item.status }}
                       </span>
                     </div>
 
-                    <div class="text-sm font-medium truncate mt-1" title="{{ c.item.cliente_nome }}">{{ c.item.cliente_nome }}</div>
-                    <div class="text-xs text-gray-600 truncate" title="{{ c.item.servico_nome }}">{{ c.item.servico_nome }}</div>
+                    <div class="mt-1">
+                      <div class="text-[13px] font-semibold text-slate-900 truncate" title="{{ c.item.cliente_nome }}">
+                        {{ c.item.cliente_nome }}
+                      </div>
+                      <div class="text-[12px] ia-text-muted truncate" title="{{ c.item.servico_nome }}">
+                        {{ c.item.servico_nome }}
+                      </div>
+                    </div>
 
                     {% if c.conflicts and c.conflicts > 0 %}
                       <div class="text-[11px] text-rose-700 mt-1">⚠️ +{{ c.conflicts }} conflito(s)</div>
                     {% endif %}
-
-                    <div class="mt-2">
-                      <a href="{% url 'solicitacoes:detalhe' shop.slug c.item.id %}"  {# <= apenas ID, como no _agenda_card.html #}
-                         class="text-[11px] underline">Ver detalhes</a>
-                    </div>
-                  </div>
+                  </a>
                 {% endwith %}
 
               {% elif c.occupied %}
-                <!-- Ocupado (dentro da janela de um agendamento) -->
-                <div class="rounded-lg border border-dashed border-gray-300 p-2 bg-gray-50 text-center text-gray-500">
+                <div class="rounded-xl border border-dashed border-slate-300 p-3 bg-slate-50 text-center ia-text-muted shadow-sm">
                   Ocupado
                 </div>
 
               {% else %}
-                <!-- Livre / Almoço / Folga -->
                 {% if not c.available and c.reason == 'almoco' %}
-                  <div class="rounded-lg p-2 text-center bg-amber-50 border border-amber-100">
-                    <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">🍽️ Almoço</span>
+                  <div class="rounded-xl p-3 text-center bg-amber-50 border border-amber-100 shadow-sm">
+                    <span class="pill bg-amber-100 text-amber-800">🍽️ Almoço</span>
                   </div>
                 {% elif not c.available and c.reason == 'folga' %}
-                  <div class="rounded-lg p-2 text-center bg-slate-50 border border-slate-200">
-                    <span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">🛑 Folga</span>
+                  <div class="rounded-xl p-3 text-center bg-slate-50 border border-slate-200 shadow-sm">
+                    <span class="pill bg-slate-200 text-slate-700">🛑 Folga</span>
                   </div>
                 {% else %}
-                  <div class="rounded-lg border border-dashed border-emerald-200 p-2 bg-white text-center">
-                    {# Igual ao _agenda_card.html: sem shop.slug. Se sua rota exigir slug, me diga o pattern que adapto. #}
-                    <a href="{% url 'solicitacoes:solicitacoes' shop.slug %}?inicio={{ c.time|date:'Y-m-d\\TH:i' }}"
-                      class="block h-full w-full rounded-lg border border-dashed border-emerald-300 bg-white hover:bg-emerald-50 
-                              flex items-center justify-center text-[12px] font-medium text-emerald-700 transition"
-                      title="Agendar neste horário">
-                      ➕ Livre · Agendar
-                    </a>
-                  </div>
+                  <a href="{% url 'solicitacoes:solicitacoes' shop.slug %}?inicio={{ c.time|date:'Y-m-d\\TH:i' }}"
+                     class="block rounded-xl border border-dashed border-emerald-300 p-3 bg-white hover:bg-emerald-50 hover:shadow-md transition text-center shadow-sm">
+                    <span class="text-[12px] font-medium text-emerald-700">➕ Livre · Agendar</span>
+                  </a>
                 {% endif %}
               {% endif %}
             </div>

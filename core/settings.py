@@ -28,9 +28,12 @@ CSRF_TRUSTED_ORIGINS = os.getenv(
 ).split(",")
 
 # Redirecionamentos de auth
-LOGIN_URL = os.getenv("LOGIN_URL", "login")
-LOGIN_REDIRECT_URL = os.getenv("LOGIN_REDIRECT_URL", "painel:dashboard")
-LOGOUT_REDIRECT_URL = os.getenv("LOGOUT_REDIRECT_URL", "login")
+LOGIN_URL = "barb_auth:login"
+LOGIN_REDIRECT_URL = "painel:dashboard"
+LOGOUT_REDIRECT_URL = "barb_auth:login"
+
+#Dias para o cliente ficar inativo
+CLIENTE_INATIVO_DIAS = 90
 
 # =========================
 # Apps

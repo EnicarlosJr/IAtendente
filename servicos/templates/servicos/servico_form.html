@@ -3,23 +3,151 @@
 {% block header %}{{ title|default:"Serviço" }}{% endblock %}
 
 {% block content %}
+{% with is_edit=form.instance.pk %}
+
 <div class="mx-auto max-w-2xl px-4 py-6">
-  <form method="post" class="bg-white rounded-xl border p-4 space-y-3">
+
+  <form method="post" action="" novalidate class="bg-white rounded-xl border p-4 space-y-4">
     {% csrf_token %}
-    {{ form.non_field_errors }}
 
-    <div>{{ form.nome.label_tag }} {{ form.nome }}</div>
-    <div>{{ form.categoria.label_tag }} {{ form.categoria }}</div>
-    <div>{{ form.duracao_min.label_tag }} {{ form.duracao_min }}</div>
-    <div>{{ form.preco.label_tag }} {{ form.preco }}</div>
-    <div>{{ form.descricao.label_tag }} {{ form.descricao }}</div>
-    <div class="flex items-center gap-2">{{ form.ativo }} {{ form.ativo.label_tag }}</div>
+    {# Campo hidden para preservar redirecionamento, caso venha ?next=... #}
+    {% if request.GET.next %}
+      <input type="hidden" name="next" value="{{ request.GET.next }}">
+    {% elif request.POST.next %}
+      <input type="hidden" name="next" value="{{ request.POST.next }}">
+    {% endif %}
 
-    <div class="pt-2 flex gap-2">
-      <a href="{% url 'servicos:lista' shop.slug %}" 
-         class="px-4 py-2 rounded-xl border">Cancelar</a>
-      <button class="px-4 py-2 rounded-xl bg-black text-white">Salvar</button>
+    {# Erros globais do form #}
+    {% if form.non_field_errors %}
+      <div class="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
+        {{ form.non_field_errors }}
+      </div>
+    {% endif %}
+
+    {# Nome #}
+    <div>
+      <label for="{{ form.nome.id_for_label }}" class="block text-sm font-medium mb-1">
+        {{ form.nome.label }}
+      </label>
+      {{ form.nome }}
+      {% if form.nome.help_text %}
+        <p id="nome-help" class="mt-1 text-xs text-slate-500">{{ form.nome.help_text }}</p>
+      {% endif %}
+      {% if form.nome.errors %}
+        <ul class="mt-1 text-xs text-rose-700 space-y-0.5">
+          {% for e in form.nome.errors %}<li>{{ e }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    {# Categoria #}
+    <div>
+      <label for="{{ form.categoria.id_for_label }}" class="block text-sm font-medium mb-1">
+        {{ form.categoria.label }}
+      </label>
+      {{ form.categoria }}
+      {% if form.categoria.help_text %}
+        <p id="categoria-help" class="mt-1 text-xs text-slate-500">{{ form.categoria.help_text }}</p>
+      {% endif %}
+      {% if form.categoria.errors %}
+        <ul class="mt-1 text-xs text-rose-700 space-y-0.5">
+          {% for e in form.categoria.errors %}<li>{{ e }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    {# Duração (min) #}
+    <div>
+      <label for="{{ form.duracao_min.id_for_label }}" class="block text-sm font-medium mb-1">
+        {{ form.duracao_min.label }}
+      </label>
+      {{ form.duracao_min }}
+      {% if form.duracao_min.help_text %}
+        <p id="duracao_min-help" class="mt-1 text-xs text-slate-500">{{ form.duracao_min.help_text }}</p>
+      {% endif %}
+      {% if form.duracao_min.errors %}
+        <ul class="mt-1 text-xs text-rose-700 space-y-0.5">
+          {% for e in form.duracao_min.errors %}<li>{{ e }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    {# Preço (R$) #}
+    <div>
+      <label for="{{ form.preco.id_for_label }}" class="block text-sm font-medium mb-1">
+        {{ form.preco.label }}
+      </label>
+      {{ form.preco }}
+      {% if form.preco.help_text %}
+        <p id="preco-help" class="mt-1 text-xs text-slate-500">{{ form.preco.help_text }}</p>
+      {% endif %}
+      {% if form.preco.errors %}
+        <ul class="mt-1 text-xs text-rose-700 space-y-0.5">
+          {% for e in form.preco.errors %}<li>{{ e }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    {# Descrição #}
+    <div>
+      <label for="{{ form.descricao.id_for_label }}" class="block text-sm font-medium mb-1">
+        {{ form.descricao.label }}
+      </label>
+      {{ form.descricao }}
+      {% if form.descricao.help_text %}
+        <p id="descricao-help" class="mt-1 text-xs text-slate-500">{{ form.descricao.help_text }}</p>
+      {% endif %}
+      {% if form.descricao.errors %}
+        <ul class="mt-1 text-xs text-rose-700 space-y-0.5">
+          {% for e in form.descricao.errors %}<li>{{ e }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    {# Ativo #}
+    <div class="flex items-center gap-2">
+      {{ form.ativo }}
+      <label for="{{ form.ativo.id_for_label }}" class="text-sm">{{ form.ativo.label }}</label>
+    </div>
+    {% if form.ativo.errors %}
+      <ul class="mt-1 text-xs text-rose-700 space-y-0.5">
+        {% for e in form.ativo.errors %}<li>{{ e }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    {# Ações #}
+    <div class="pt-2 flex items-center gap-2">
+      <a href="{% url 'servicos:lista' shop.slug %}" class="rounded-xl border px-4 py-2">
+        Cancelar
+      </a>
+      <button class="rounded-xl bg-black text-white px-4 py-2">
+        Salvar
+      </button>
+      {% if is_edit %}
+        <span class="text-xs text-slate-500 ml-1">Editando ID #{{ form.instance.pk }}</span>
+      {% endif %}
     </div>
   </form>
+
+  {# Dica leve de UX #}
+  <p class="mt-4 text-xs text-slate-500">
+    Dica: você pode ajustar o preço ao confirmar um atendimento, sem alterar o valor padrão do serviço.
+  </p>
 </div>
+
+{% endwith %}
+
+{# Pequena melhoria: normaliza vírgula → ponto no envio do preço (sem mudar o valor exibido durante a digitação) #}
+<script>
+  (function () {
+    const form = document.querySelector('form[method="post"]');
+    if (!form) return;
+    form.addEventListener('submit', () => {
+      const price = form.querySelector('[name="preco"]');
+      if (price && typeof price.value === 'string') {
+        price.value = price.value.replace(',', '.').trim();
+      }
+    });
+  })();
+</script>
 {% endblock %}

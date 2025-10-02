@@ -9,27 +9,52 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404, render, redirect
+from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
+from django.db import transaction
+from django.db.models import Q
+
+from barbearias.models import BarberShop
+from clientes.models import HistoricoItem
+from core.access import require_shop_member, is_manager
 
 from agendamentos.forms import (
     BarbeiroAvailabilityForm,
     BarbeiroTimeOffForm,
-    AgendamentoForm,           # <- form de agendamento no app correto
+    AgendamentoForm,
 )
 from agendamentos.models import (
     Agendamento,
     StatusAgendamento,
-    BarberAvailability,
     BarbeiroAvailability as Availability,
     BarbeiroTimeOff as TimeOff,
 )
-from barbearias.models import BarberShop
 
-# ---------------------------------------------------
-# Helpers
-# ---------------------------------------------------
+# --- Integração opcional com Solicitações (tolerante à ausência do app)
+try:
+    from solicitacoes.models import Solicitacao, SolicitacaoStatus
+    HAS_SOL = True
+except Exception:  # pragma: no cover
+    Solicitacao = None
+    SolicitacaoStatus = None
+    HAS_SOL = False
+
+# --- Integração opcional com Solicitações (tolerante à ausência do app)
+try:
+    from solicitacoes.models import Solicitacao, SolicitacaoStatus
+    HAS_SOL = True
+except Exception:
+    Solicitacao = None
+    SolicitacaoStatus = None
+    HAS_SOL = False
+
+# ===================================================
+# Helpers gerais
+# ===================================================
+
 def _parse_date(s: str, default: date) -> date:
-    """Aceita 'YYYY-MM-DD' (campo <input type=date>) e retorna date; fallback = default."""
     try:
         return datetime.strptime(s, "%Y-%m-%d").date()
     except Exception:
@@ -54,7 +79,7 @@ def _day_nav(d: date) -> tuple[date, date]:
 def _day_slots(d: date, start_h: int = 8, end_h: int = 20, step_min: int = 30):
     tz = timezone.get_current_timezone()
     cur = timezone.make_aware(datetime(d.year, d.month, d.day, start_h, 0, 0), tz)
-    end = timezone.make_aware(datetime(d.year, d.month, d.day, end_h,   0, 0), tz)
+    end = timezone.make_aware(datetime(d.year, d.month, d.day, end_h, 0, 0), tz)
     step = timedelta(minutes=step_min)
     out = []
     while cur < end:
@@ -63,135 +88,248 @@ def _day_slots(d: date, start_h: int = 8, end_h: int = 20, step_min: int = 30):
     return out
 
 
-def _generate_slots(d: date, rule: Availability | None, timeoffs_qs):
+def _calc_fim(inicio: datetime, servico) -> datetime | None:
     """
-    Lista de slots do dia com flags:
-      - available: True/False
-      - reason: "almoco" | "folga" | None
+    Calcula fim usando campos comuns de duração. Fallback para 30 minutos.
     """
-    tz = timezone.get_current_timezone()
-    if not rule or not rule.is_active:
-        return []
-
-    def aware(dt: datetime):
-        return timezone.make_aware(dt, tz) if timezone.is_naive(dt) else dt.astimezone(tz)
-
-    step = timedelta(minutes=rule.slot_minutes or 30)
-    start_dt = aware(datetime.combine(d, rule.start_time))
-    end_dt   = aware(datetime.combine(d, rule.end_time))
-    lunch_st = aware(datetime.combine(d, rule.lunch_start)) if rule.lunch_start else None
-    lunch_en = aware(datetime.combine(d, rule.lunch_end))   if rule.lunch_end else None
-
-    # folgas do dia
-    day_start = aware(datetime.combine(d, time(0, 0)))
-    day_end   = day_start + timedelta(days=1)
-    offs = list(timeoffs_qs.filter(start__lt=day_end, end__gt=day_start))
-
-    slots = []
-    cur = start_dt
-    while cur < end_dt:
-        nxt = min(cur + step, end_dt)
-        available, reason = True, None
-
-        # almoço
-        if lunch_st and lunch_en and not (nxt <= lunch_st or cur >= lunch_en):
-            available, reason = False, "almoco"
-
-        # folga/bloqueio
-        if available:
-            for off in offs:
-                off_st = off.start.astimezone(tz)
-                off_en = off.end.astimezone(tz)
-                if not (nxt <= off_st or cur >= off_en):
-                    available, reason = False, "folga"
-                    break
-
-        slots.append({"start": cur, "end": nxt, "available": available, "reason": reason})
-        cur = nxt
-    return slots
+    if not inicio:
+        return None
+    dur_min = None
+    if servico:
+        for field in ("duracao_minutos", "duracao", "duracao_estimada", "tempo"):
+            val = getattr(servico, field, None)
+            if isinstance(val, int) and val > 0:
+                dur_min = val
+                break
+    dur_min = dur_min or 30
+    return inicio + timedelta(minutes=dur_min)
 
 
-# ---------------------------------------------------
+def _intervalos_agendamentos(qs, tz):
+    """
+    [(start_local, end_local, obj Agendamento)]
+    - tolera fim=None calculando pela duração do serviço
+    """
+    out = []
+    for a in qs.order_by("inicio"):
+        if not a.inicio:
+            continue
+        ini = timezone.localtime(a.inicio, tz)
+        fim_calc = a.fim or _calc_fim(a.inicio, getattr(a, "servico", None))
+        if not fim_calc:
+            continue
+        fim = timezone.localtime(fim_calc, tz)
+        out.append((ini, fim, a))
+    return out
+
+def _status_is_pendente(status_val) -> bool:
+    return str(status_val).upper() in {"PENDENTE", getattr(SolicitacaoStatus, "PENDENTE", "PENDENTE")}
+
+def _can_act_on_solic(user, sol, shop) -> bool:
+    """
+    Política simples: gerente pode, barbeiro atribuído pode, ou se não houver barbeiro.
+    Ajuste se tiver outra regra de permissão.
+    """
+    try:
+        if is_manager  and is_manager.__code__.co_argcount == 1:  # compat se is_manager(request) ou is_manager(user)
+            can_mgr = is_manager(user)
+        else:
+            can_mgr = is_manager(user)  # caso padrão (se sua is_manager espera 'request', adapte)
+    except Exception:
+        # se a sua is_manager espera request, use: is_manager(request) DENTRO das views (abaixo faço isso também)
+        can_mgr = False
+
+    barb = getattr(sol, "barbeiro", None)
+    return bool(can_mgr or barb is None or barb == user)
+
+def _inject_actions_for_solic(item_dict, shop_slug, sol_obj, can_act: bool):
+    """
+    Adiciona campos usados no template para os botões.
+    """
+    item_dict["kind"] = "solicitacao"
+    item_dict["can_act"] = bool(can_act and _status_is_pendente(item_dict.get("status")))
+    if item_dict["can_act"]:
+        item_dict["confirm_url"] = reverse("solicitacoes:confirmar", args=[shop_slug, sol_obj.id])
+        item_dict["deny_url"]    = reverse("solicitacoes:recusar",   args=[shop_slug, sol_obj.id])
+
+def _intervalos_solicitacoes(qs, tz):
+    """
+    [(start_local, end_local, obj Solicitacao)]
+    - tolera fim=None calculando 30min (ou pela duração do serviço se existir)
+    """
+    out = []
+    for s in qs.order_by("inicio"):
+        if not s.inicio:
+            continue
+        ini = timezone.localtime(s.inicio, tz)
+        # muitos modelos de solicitação não têm fim; tenta pelo serviço
+        fim_calc = getattr(s, "fim", None) or _calc_fim(s.inicio, getattr(s, "servico", None))
+        if not fim_calc:
+            continue
+        fim = timezone.localtime(fim_calc, tz)
+        out.append((ini, fim, s))
+    return out
+
+
+def _month_nav(d: date) -> tuple[date, date]:
+    prev_month = (d.replace(day=1) - timedelta(days=1)).replace(day=1)
+    next_month = (d.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return prev_month, next_month
+
+
+# ===================================================
 # Redirect principal
-# ---------------------------------------------------
+# ===================================================
+
 def agenda_redirect(request, shop_slug):
     return redirect("agendamentos:agenda_semana", shop_slug=shop_slug)
 
 
-# ---------------------------------------------------
+def agenda(request, shop_slug):
+    return redirect("agendamentos:agenda", shop_slug=shop_slug)
+
+
+# ===================================================
 # AGENDA — DIA
-# ---------------------------------------------------
+# ===================================================
+
+@require_shop_member
 @login_required
 def agenda_dia(request, shop_slug):
-    """
-    Agenda do dia do barbeiro autenticado (apenas AGENDAMENTOS confirmados).
-    """
     shop = get_object_or_404(BarberShop, slug=shop_slug)
 
     tz = timezone.get_current_timezone()
     dia_str = (request.GET.get("dia") or request.GET.get("data") or "").strip()
     d = _parse_date(dia_str, timezone.localdate())
 
-    # Janela do dia
+    # alvo (barbeiro)
+    barbeiro_param = (request.GET.get("barbeiro") or "").strip()
+    target_user = None
+    if barbeiro_param and barbeiro_param.isdigit():
+        User = get_user_model()
+        try:
+            target_user = User.objects.get(pk=int(barbeiro_param))
+        except Exception:
+            target_user = None
+
     start = timezone.make_aware(datetime(d.year, d.month, d.day, 0, 0, 0), tz)
     end = start + timedelta(days=1)
 
-    # Regra do dia + time-offs (barbeiro logado)
-    rule = Availability.objects.filter(barbeiro=request.user, weekday=d.weekday()).first()
-    offs_qs = TimeOff.objects.filter(barbeiro=request.user)
+    show_all = is_manager(request) and not target_user and not barbeiro_param
 
-    # Slots base
-    slots = _generate_slots(d, rule, offs_qs)
+    # Slots do grid
+    if show_all:
+        slots = [{"start": dt, "end": dt + timedelta(minutes=30),
+                  "available": True, "reason": None}
+                 for dt in _day_slots(d, 8, 20, 30)]
+    else:
+        user_for_slots = target_user or request.user
+        rule = Availability.objects.filter(barbeiro=user_for_slots, weekday=d.weekday()).first()
+        offs_qs = TimeOff.objects.filter(barbeiro=user_for_slots)
+        slots = _generate_slots(d, rule, offs_qs) or [
+            {"start": dt, "end": dt + timedelta(minutes=30), "available": True, "reason": None}
+            for dt in _day_slots(d, 8, 20, 30)
+        ]
+    slot_step = (slots[1]["start"] - slots[0]["start"]) if len(slots) > 1 else timedelta(minutes=30)
 
-    # Agendamentos confirmados (margem 2h antes para pegar cruzamentos que estendem do dia anterior)
-    query_start = start - timedelta(hours=2)
-    agendamentos = (
-        Agendamento.objects.filter(
-            shop=shop,
-            barbeiro=request.user,
-            status=StatusAgendamento.CONFIRMADO,
-            inicio__gte=query_start,
-            inicio__lt=end,
-        )
+    # --------- Agendamentos ---------
+    ag_qs = (
+        Agendamento.objects
+        .filter(shop=shop)
+        .exclude(status=getattr(StatusAgendamento, "CANCELADO", None))
+        .filter(inicio__isnull=False, inicio__gte=start, inicio__lt=end)
         .select_related("cliente", "servico")
-        .order_by("inicio")
     )
+    if not show_all:
+        ag_qs = ag_qs.filter(Q(barbeiro=(target_user or request.user)) | Q(barbeiro__isnull=True))
+    ag_intervals = _intervalos_agendamentos(ag_qs, tz)
 
-    intervals = [(a.inicio, a.fim, a) for a in agendamentos]
+    # --------- Solicitações ---------
+    sol_intervals = []
+    if HAS_SOL and SolicitacaoStatus:
+        exclude_status = [
+            getattr(SolicitacaoStatus, "CANCELADA", "CANCELADA"),
+            getattr(SolicitacaoStatus, "NEGADA", "NEGADA"),
+        ]
+        sol_qs = (
+            Solicitacao.objects
+            .filter(shop=shop)
+            .exclude(status__in=exclude_status)
+            .filter(inicio__isnull=False, inicio__gte=start, inicio__lt=end)
+            .select_related("cliente", "servico")
+        )
+        if not show_all:
+            sol_qs = sol_qs.filter(Q(barbeiro=(target_user or request.user)) | Q(barbeiro__isnull=True))
+        sol_intervals = _intervalos_solicitacoes(sol_qs, tz)
 
+    # Monta linhas do grid
     rows = []
     for slot in slots:
         t = slot["start"]
-        overlaps = [iv for iv in intervals if iv[0] <= t < iv[1]]
+
+        ag_matches = [iv for iv in ag_intervals if iv[0] <= t < iv[1]]
+        sol_matches = [iv for iv in sol_intervals if iv[0] <= t < iv[1]]
 
         row = {
             "time": t,
             "item": None,
             "occupied": False,
-            "conflicts": max(0, len(overlaps) - 1),
+            "conflicts": max(0, len(ag_matches) + len(sol_matches) - 1),
             "available": slot["available"],
             "reason": slot["reason"],
         }
 
-        if overlaps:
-            a_start, a_end, ag = overlaps[0]
-            if t == a_start:
-                row["item"] = {
-                    "id": ag.id,
-                    "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
-                    "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
-                    "status": ag.status,
-                    "inicio": ag.inicio,
-                    "fim": ag.fim,
-                }
+        def _build_item_from_ag(a_start, a_end, ag):
+            return {
+                "id": ag.id,
+                "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
+                "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
+                "status": ag.status,
+                "inicio": a_start,
+                "fim": a_end,
+                "is_solicitacao": False,
+                "kind": "agendamento",
+                "can_act": False,
+            }
+
+        def _build_item_from_sol(s_start, s_end, sol):
+            status_txt = str(getattr(sol, "status", "PENDENTE")).upper()
+            item = {
+                "id": sol.id,
+                "cliente_nome": getattr(sol, "cliente_nome", None) or (getattr(sol, "cliente", None).nome if getattr(sol, "cliente", None) else getattr(sol, "nome", "—")),
+                "servico_nome": getattr(sol, "servico_nome", None) or (getattr(sol, "servico", None).nome if getattr(sol, "servico", None) else "—"),
+                "status": status_txt,
+                "inicio": s_start,
+                "fim": s_end,
+                "is_solicitacao": True,
+                "kind": "solicitacao",
+            }
+            # Pode agir? gerente, barbeiro designado ou sem barbeiro, e pendente
+            can_act = (is_manager(request) or getattr(sol, "barbeiro", None) in (None, request.user))
+            item["can_act"] = bool(can_act and _status_is_pendente(status_txt))
+            if item["can_act"]:
+                item["confirm_url"] = reverse("solicitacoes:confirmar", args=[shop.slug, sol.id])
+                item["deny_url"]    = reverse("solicitacoes:recusar",   args=[shop.slug, sol.id])
+            return item
+
+        # prioridade: Agendamento, senão Solicitação
+        if ag_matches:
+            a_start, a_end, ag = ag_matches[0]
+            if a_start <= t < (a_start + slot_step):
+                row["item"] = _build_item_from_ag(a_start, a_end, ag)
+            else:
+                row["occupied"] = True
+        elif sol_matches:
+            s_start, s_end, sol = sol_matches[0]
+            if s_start <= t < (s_start + slot_step):
+                row["item"] = _build_item_from_sol(s_start, s_end, sol)
             else:
                 row["occupied"] = True
 
         rows.append(row)
 
     prev_day, next_day = _day_nav(d)
-
-    ctx = {
+    return render(request, "agendamentos/agenda_dia.html", {
         "title": "Agenda",
         "view": "dia",
         "date": d,
@@ -199,179 +337,210 @@ def agenda_dia(request, shop_slug):
         "next_day": next_day,
         "rows": rows,
         "shop": shop,
-    }
-    return render(request, "agendamentos/agenda_dia.html", ctx)
+    })
 
 
-# ---------------------------------------------------
+
+# ===================================================
 # AGENDA — SEMANA
-# ---------------------------------------------------
+# ===================================================
+
+@require_shop_member
 @login_required
 def agenda_semana(request, shop_slug):
-    """
-    Grade semanal por barbeiro (apenas AGENDAMENTOS confirmados).
-    """
     shop = get_object_or_404(BarberShop, slug=shop_slug)
-
     tz = timezone.get_current_timezone()
+
     hoje = timezone.localdate()
     base = _parse_date(request.GET.get("data", ""), hoje)
-    wk_start, wk_end = _week_bounds(base)
-    barbeiro = request.user
-
-    # resolve barbeiro alvo
-    barbeiro = None
-    barbeiro_param = (request.GET.get("barbeiro") or "").strip()
-    if barbeiro_param:
-        User = get_user_model()
-        try:
-            barbeiro = User.objects.get(pk=barbeiro_param)
-        except Exception:
-            barbeiro = None
-    elif request.user.is_authenticated:
-        barbeiro = request.user
-
-    DEFAULT_START_H, DEFAULT_END_H, DEFAULT_STEP_MIN = 8, 20, 30
+    wk_start, _ = _week_bounds(base)
     days = [wk_start + timedelta(days=i) for i in range(7)]
     day_labels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
     days_ctx = [{"date": d, "label": day_labels[i]} for i, d in enumerate(days)]
 
-    # janelas/slots por dia
-    day_windows_map, day_slots_map = {}, {}
-    used_custom_rules = False
-    if barbeiro:
+    # alvo
+    barbeiro = None
+    barbeiro_param = (request.GET.get("barbeiro") or "").strip()
+    if barbeiro_param and barbeiro_param.isdigit():
+        User = get_user_model()
         try:
-            from .utils import work_windows_for_day, split_in_slots, subtract_timeoffs
-            for d in days:
-                windows = work_windows_for_day(barbeiro, d)
-                day_windows_map[d] = windows[:]
-
-                base_slots = []
-                for ws, we, step in windows:
-                    base_slots += split_in_slots(ws, we, step or DEFAULT_STEP_MIN)
-
-                final_slots = subtract_timeoffs(barbeiro, base_slots)
-                if not final_slots:
-                    final_slots = _day_slots(d, start_h=DEFAULT_START_H, end_h=DEFAULT_END_H, step_min=DEFAULT_STEP_MIN)
-                else:
-                    used_custom_rules = True
-                day_slots_map[d] = final_slots
+            barbeiro = User.objects.get(pk=int(barbeiro_param))
         except Exception:
-            for d in days:
-                day_windows_map[d] = [(timezone.make_aware(datetime(d.year, d.month, d.day, DEFAULT_START_H), tz),
-                                       timezone.make_aware(datetime(d.year, d.month, d.day, DEFAULT_END_H), tz),
-                                       DEFAULT_STEP_MIN)]
-                day_slots_map[d] = _day_slots(d, start_h=DEFAULT_START_H, end_h=DEFAULT_END_H, step_min=DEFAULT_STEP_MIN)
-    else:
-        for d in days:
-            day_windows_map[d] = [(timezone.make_aware(datetime(d.year, d.month, d.day, DEFAULT_START_H), tz),
-                                   timezone.make_aware(datetime(d.year, d.month, d.day, DEFAULT_END_H), tz),
-                                   DEFAULT_STEP_MIN)]
-            day_slots_map[d] = _day_slots(d, start_h=DEFAULT_START_H, end_h=DEFAULT_END_H, step_min=DEFAULT_STEP_MIN)
+            barbeiro = None
+    elif not is_manager(request):
+        barbeiro = request.user
 
-    # HH:MM das linhas
-    time_keys = set()
+    # Slots (mapa de horários)
+    DEFAULT_START_H, DEFAULT_END_H, DEFAULT_STEP_MIN = 8, 20, 30
+    day_slots_map = {d: _day_slots(d, DEFAULT_START_H, DEFAULT_END_H, DEFAULT_STEP_MIN) for d in days}
+
+    slot_step = timedelta(minutes=DEFAULT_STEP_MIN)
     for d in days:
-        for dt_slot in day_slots_map[d]:
-            time_keys.add((dt_slot.hour, dt_slot.minute))
-    time_keys = sorted(time_keys)
+        v = day_slots_map[d]
+        if len(v) >= 2:
+            slot_step = v[1] - v[0]
+            break
 
-    # agendamentos confirmados
+    time_keys = sorted({(dt.hour, dt.minute) for d in days for dt in day_slots_map[d]})
+    day_slot_keys = {d: {(dt.hour, dt.minute) for dt in day_slots_map.get(d, [])} for d in days}
+
+    # Janela semanal
     week_start_dt = timezone.make_aware(datetime(wk_start.year, wk_start.month, wk_start.day, 0, 0, 0), tz)
-    query_start = week_start_dt - timedelta(hours=6)
     week_end_dt = week_start_dt + timedelta(days=7)
 
-    qs = (Agendamento.objects
-        .filter(
-            shop=shop,
-            status=StatusAgendamento.CONFIRMADO,
-            inicio__lt=week_end_dt,
-            inicio__gte=query_start,
-        )
+    # --------- Agendamentos ---------
+    ag_qs = (
+        Agendamento.objects
+        .filter(shop=shop)
+        .exclude(status=getattr(StatusAgendamento, "CANCELADO", None))
+        .filter(inicio__isnull=False, inicio__gte=week_start_dt, inicio__lt=week_end_dt)
         .select_related("cliente", "servico")
-        .filter(barbeiro=barbeiro))   # <- aqui é filter
-    # filtra por barbeiro, se houver
+    )
     if barbeiro:
-        qs = qs.filter(barbeiro=barbeiro)
-    confirmadas = list(qs.order_by("inicio"))
+        ag_qs = ag_qs.filter(Q(barbeiro=barbeiro) | Q(barbeiro__isnull=True))
+    ag_intervals = _intervalos_agendamentos(ag_qs, tz)
 
-    # indexa por dia
-    day_intervals = {d: [] for d in days}
-    for ag in confirmadas:
-        s_start, s_end = ag.inicio, ag.fim
-        curr = s_start.date()
-        last = s_end.date()
-        while curr <= last:
-            if curr in day_intervals:
-                day_intervals[curr].append((s_start, s_end, ag))
-            curr += timedelta(days=1)
+    # Index agendamentos por dia
+    ag_by_day = {d: [] for d in days}
+    for s_start, s_end, ag in ag_intervals:
+        key = s_start.date()
+        if key in ag_by_day:
+            ag_by_day[key].append((s_start, s_end, ag))
 
-    # monta linhas
+    # --------- Solicitações ---------
+    sol_by_day = {d: [] for d in days}
+    if HAS_SOL and SolicitacaoStatus:
+        exclude_status = [
+            getattr(SolicitacaoStatus, "CANCELADA", "CANCELADA"),
+            getattr(SolicitacaoStatus, "NEGADA", "NEGADA"),
+        ]
+        sol_qs = (
+            Solicitacao.objects
+            .filter(shop=shop)
+            .exclude(status__in=exclude_status)
+            .filter(inicio__isnull=False, inicio__gte=week_start_dt, inicio__lt=week_end_dt)
+            .select_related("cliente", "servico")
+        )
+        if barbeiro:
+            sol_qs = sol_qs.filter(Q(barbeiro=barbeiro) | Q(barbeiro__isnull=True))
+
+        sol_intervals = _intervalos_solicitacoes(sol_qs, tz)
+        for s_start, s_end, sol in sol_intervals:
+            key = s_start.date()
+            if key in sol_by_day:
+                sol_by_day[key].append((s_start, s_end, sol))
+
+    # Monta linhas
     rows = []
     for (hh, mm) in time_keys:
         time_label = timezone.make_aware(datetime(wk_start.year, wk_start.month, wk_start.day, hh, mm), tz)
         cells = []
         for d in days:
             slot_dt = timezone.make_aware(datetime(d.year, d.month, d.day, hh, mm), tz)
-            matches = [(a, b, ag) for (a, b, ag) in day_intervals.get(d, []) if a <= slot_dt < b]
-            available, reason = True, None
-            if not ((hh, mm) in {(dt.hour, dt.minute) for dt in day_slots_map.get(d, [])}):
-                available, reason = False, "folga"
 
-            if matches:
-                s_start, s_end, ag = matches[0]
-                if slot_dt == s_start:
-                    cells.append({"item": {
-                        "id": ag.id,
-                        "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
-                        "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
-                        "inicio": s_start,
-                        "fim": s_end,
-                        "status": ag.status,
-                    }, "occupied": False, "time": slot_dt, "available": available, "reason": reason,
-                        "conflicts": max(0, len(matches) - 1)})
+            ag_matches = [(a, b, obj) for (a, b, obj) in ag_by_day.get(d, []) if a <= slot_dt < b]
+            sol_matches = [(a, b, obj) for (a, b, obj) in sol_by_day.get(d, []) if a <= slot_dt < b]
+
+            available, reason = (True, None) if (hh, mm) in day_slot_keys.get(d, set()) else (False, "folga")
+
+            def _cell_item_from_ag(a_start, a_end, ag):
+                return {
+                    "id": ag.id,
+                    "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
+                    "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
+                    "status": ag.status,
+                    "inicio": a_start,
+                    "fim": a_end,
+                    "is_solicitacao": False,
+                    "kind": "agendamento",
+                    "can_act": False,
+                }
+
+            def _cell_item_from_sol(s_start, s_end, sol):
+                status_txt = str(getattr(sol, "status", "PENDENTE")).upper()
+                item = {
+                    "id": sol.id,
+                    "cliente_nome": getattr(sol, "cliente_nome", None) or (getattr(sol, "cliente", None).nome if getattr(sol, "cliente", None) else getattr(sol, "nome", "—")),
+                    "servico_nome": getattr(sol, "servico_nome", None) or (getattr(sol, "servico", None).nome if getattr(sol, "servico", None) else "—"),
+                    "status": status_txt,
+                    "inicio": s_start,
+                    "fim": s_end,
+                    "is_solicitacao": True,
+                    "kind": "solicitacao",
+                }
+                can_act = (is_manager(request) or getattr(sol, "barbeiro", None) in (None, request.user))
+                item["can_act"] = bool(can_act and _status_is_pendente(status_txt))
+                if item["can_act"]:
+                    item["confirm_url"] = reverse("solicitacoes:confirmar", args=[shop.slug, sol.id])
+                    item["deny_url"]    = reverse("solicitacoes:recusar",   args=[shop.slug, sol.id])
+                return item
+
+            if ag_matches:
+                a_start, a_end, ag = ag_matches[0]
+                is_first = (a_start <= slot_dt < (a_start + slot_step))
+                if is_first:
+                    cells.append({
+                        "item": _cell_item_from_ag(a_start, a_end, ag),
+                        "occupied": False,
+                        "time": slot_dt,
+                        "available": available,
+                        "reason": reason,
+                        "conflicts": max(0, len(ag_matches) + len(sol_matches) - 1),
+                    })
                 else:
-                    cells.append({"item": None, "occupied": True, "time": slot_dt,
-                                  "available": available, "reason": reason, "conflicts": max(0, len(matches) - 1)})
+                    cells.append({
+                        "item": None, "occupied": True, "time": slot_dt,
+                        "available": available, "reason": reason,
+                        "conflicts": max(0, len(ag_matches) + len(sol_matches) - 1),
+                    })
+            elif sol_matches:
+                s_start, s_end, sol = sol_matches[0]
+                is_first = (s_start <= slot_dt < (s_start + slot_step))
+                if is_first:
+                    cells.append({
+                        "item": _cell_item_from_sol(s_start, s_end, sol),
+                        "occupied": False,
+                        "time": slot_dt,
+                        "available": available,
+                        "reason": reason,
+                        "conflicts": max(0, len(sol_matches) - 1),
+                    })
+                else:
+                    cells.append({
+                        "item": None, "occupied": True, "time": slot_dt,
+                        "available": available, "reason": reason,
+                        "conflicts": max(0, len(sol_matches) - 1),
+                    })
             else:
-                cells.append({"item": None, "occupied": False, "time": slot_dt,
-                              "available": available, "reason": reason, "conflicts": 0})
+                cells.append({
+                    "item": None, "occupied": False, "time": slot_dt,
+                    "available": available, "reason": reason, "conflicts": 0
+                })
+
         rows.append({"time": time_label, "cells": cells})
 
     prev_week, next_week = _week_nav(base)
-
-    ctx = {
+    return render(request, "agendamentos/agenda_semana.html", {
         "title": "Agenda — Semana",
         "view": "semana",
         "wk_start": wk_start,
-        "wk_end": wk_end,
+        "wk_end": wk_start + timedelta(days=6),
         "days_ctx": days_ctx,
         "rows": rows,
         "prev_week": prev_week,
         "next_week": next_week,
         "barbeiro": barbeiro,
-        "used_custom_rules": used_custom_rules,
         "shop": shop,
-    }
-    return render(request, "agendamentos/agenda_semana.html", ctx)
+    })
 
 
-# ---------------------------------------------------
+
+# ===================================================
 # AGENDA — MÊS
-# ---------------------------------------------------
-def _month_nav(d: date) -> tuple[date, date]:
-    first = d.replace(day=1)
-    prev_last = first - timedelta(days=1)
-    prev = prev_last.replace(day=1)
-    next_first = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
-    return prev, next_first
-
-
+# ===================================================
+@require_shop_member
 @login_required
 def agenda_mes(request, shop_slug):
-    """
-    Agenda mensal baseada em AGENDAMENTOS confirmados.
-    """
     shop = get_object_or_404(BarberShop, slug=shop_slug)
 
     hoje = timezone.localdate()
@@ -384,38 +553,101 @@ def agenda_mes(request, shop_slug):
     start_dt = timezone.make_aware(datetime(year, month, 1, 0, 0, 0), tz)
     end_dt = start_dt + timedelta(days=num_days)
 
-    ag_qs = (
-        Agendamento.objects.filter(
-            shop=shop,
-            barbeiro=request.user,
-            status=StatusAgendamento.CONFIRMADO,
-            inicio__gte=start_dt,
-            inicio__lt=end_dt,
-        )
-        .select_related("cliente", "servico")
-        .order_by("inicio")
-    )
+    # alvo
+    barbeiro_param = (request.GET.get("barbeiro") or "").strip()
+    target_user = None
+    if barbeiro_param and barbeiro_param.isdigit():
+        User = get_user_model()
+        try:
+            target_user = User.objects.get(pk=int(barbeiro_param))
+        except Exception:
+            target_user = None
 
+    # --------- Agendamentos ---------
+    ag_qs = (
+        Agendamento.objects
+        .filter(shop=shop)
+        .exclude(status=getattr(StatusAgendamento, "CANCELADO", None))
+        .filter(inicio__isnull=False, inicio__gte=start_dt, inicio__lt=end_dt)
+        .select_related("cliente", "servico")
+    )
+    if not is_manager(request) and not target_user:
+        ag_qs = ag_qs.filter(Q(barbeiro=request.user) | Q(barbeiro__isnull=True))
+    elif target_user:
+        ag_qs = ag_qs.filter(Q(barbeiro=target_user) | Q(barbeiro__isnull=True))
+    ag_intervals = _intervalos_agendamentos(ag_qs, tz)
+
+    # --------- Solicitações ---------
+    sol_items = []
+    if HAS_SOL and SolicitacaoStatus:
+        exclude_status = [
+            getattr(SolicitacaoStatus, "CANCELADA", "CANCELADA"),
+            getattr(SolicitacaoStatus, "NEGADA", "NEGADA"),
+        ]
+        sol_qs = (
+            Solicitacao.objects
+            .filter(shop=shop)
+            .exclude(status__in=exclude_status)
+            .filter(inicio__isnull=False, inicio__gte=start_dt, inicio__lt=end_dt)
+            .select_related("cliente", "servico")
+        )
+        if not is_manager(request) and not target_user:
+            sol_qs = sol_qs.filter(Q(barbeiro=request.user) | Q(barbeiro__isnull=True))
+        elif target_user:
+            sol_qs = sol_qs.filter(Q(barbeiro=target_user) | Q(barbeiro__isnull=True))
+
+        sol_intervals = _intervalos_solicitacoes(sol_qs, tz)
+        for s_start, s_end, sol in sol_intervals:
+            status_txt = str(getattr(sol, "status", "PENDENTE")).upper()
+            item = {
+                "id": sol.id,
+                "inicio": s_start,
+                "fim": s_end,
+                "cliente_nome": getattr(sol, "cliente_nome", None) or (getattr(sol, "cliente", None).nome if getattr(sol, "cliente", None) else getattr(sol, "nome", "—")),
+                "servico_nome": getattr(sol, "servico_nome", None) or (getattr(sol, "servico", None).nome if getattr(sol, "servico", None) else "—"),
+                "status": status_txt,
+                "is_solicitacao": True,
+                "kind": "solicitacao",
+            }
+            can_act = (is_manager(request) or getattr(sol, "barbeiro", None) in (None, request.user))
+            item["can_act"] = bool(can_act and _status_is_pendente(status_txt))
+            if item["can_act"]:
+                item["confirm_url"] = reverse("solicitacoes:confirmar", args=[shop.slug, sol.id])
+                item["deny_url"]    = reverse("solicitacoes:recusar",   args=[shop.slug, sol.id])
+            sol_items.append(item)
+
+    # Distribui por dia
     tmp = {ref_date + timedelta(days=i): [] for i in range(num_days)}
-    for ag in ag_qs:
-        d_local = timezone.localtime(ag.inicio, tz).date()
-        if d_local not in tmp:
-            continue
-        tmp[d_local].append({
-            "id": ag.id,
-            "inicio": ag.inicio,
-            "fim": ag.fim,
-            "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
-            "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
-            "status": ag.status,
-        })
+    for a_start, a_end, ag in ag_intervals:
+        day_key = a_start.date()
+        if day_key in tmp:
+            tmp[day_key].append({
+                "id": ag.id,
+                "inicio": a_start,
+                "fim": a_end,
+                "cliente_nome": ag.cliente_nome or (ag.cliente.nome if ag.cliente else "—"),
+                "servico_nome": ag.servico_nome or (ag.servico.nome if ag.servico else "—"),
+                "status": ag.status,
+                "is_solicitacao": False,
+                "kind": "agendamento",
+                "can_act": False,
+            })
+    for item in sol_items:
+        day_key = item["inicio"].date()
+        if day_key in tmp:
+            tmp[day_key].append(item)
+
+    # Ordena
+    for k in tmp.keys():
+        tmp[k].sort(key=lambda it: it["inicio"])
 
     por_dia = OrderedDict(sorted(tmp.items(), key=lambda kv: kv[0]))
     blank_cells = list(range(first_weekday))
     dias_semana = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-    prev_month, next_month = _month_nav(ref_date)
+    prev_month = (ref_date.replace(day=1) - timedelta(days=1)).replace(day=1)
+    next_month = (ref_date.replace(day=28) + timedelta(days=4)).replace(day=1)
 
-    ctx = {
+    return render(request, "agendamentos/agenda_mes.html", {
         "title": "Agenda — Mês",
         "view": "mes",
         "ref_date": ref_date,
@@ -425,13 +657,14 @@ def agenda_mes(request, shop_slug):
         "prev_month": prev_month,
         "next_month": next_month,
         "shop": shop,
-    }
-    return render(request, "agendamentos/agenda_mes.html", ctx)
+    })
 
 
-# ---------------------------------------------------
+# ===================================================
 # MINHA AGENDA (configs do barbeiro)
-# ---------------------------------------------------
+# ===================================================
+
+@require_shop_member
 @login_required
 def minha_agenda_config(request, shop_slug):
     """
@@ -462,7 +695,7 @@ def minha_agenda_config(request, shop_slug):
                     start_time="08:00",
                     end_time="18:00",
                     slot_minutes=30,
-                    is_active=(wd < 6),  # desativa domingo
+                    is_active=(wd < 6),  # domingo off
                 )
             )
         Availability.objects.bulk_create(defaults)
@@ -474,7 +707,7 @@ def minha_agenda_config(request, shop_slug):
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip()
 
-        # Salvar REGRAS (formset)
+        # Salvar REGRAS
         if action == "rules" or "rules-TOTAL_FORMS" in request.POST:
             formset = AvailabilityFormSet(request.POST, queryset=qs, prefix="rules")
             if formset.is_valid():
@@ -494,9 +727,8 @@ def minha_agenda_config(request, shop_slug):
                         any_error = True
                         messages.error(
                             request,
-                            f"Dia #{idx+1}: " + "; ".join(
-                                [f"{k}: {', '.join(v)}" for k, v in f.errors.items()]
-                            )
+                            f"Dia #{idx+1}: "
+                            + "; ".join([f"{k}: {', '.join(v)}" for k, v in f.errors.items()]),
                         )
                 if not any_error:
                     messages.error(request, "Revise os campos das regras semanais.")
@@ -515,8 +747,8 @@ def minha_agenda_config(request, shop_slug):
             else:
                 messages.error(
                     request,
-                    "; ".join([f"{k}: {', '.join(v)}" for k, v in off_form.errors.items()]) or
-                    "Não foi possível salvar a folga. Verifique os campos."
+                    "; ".join([f"{k}: {', '.join(v)}" for k, v in off_form.errors.items()])
+                    or "Não foi possível salvar a folga. Verifique os campos.",
                 )
 
     # Pré-visualização de slots do dia
@@ -526,14 +758,10 @@ def minha_agenda_config(request, shop_slug):
     except Exception:
         preview_date = timezone.localdate()
 
-    rule = Availability.objects.filter(
-        barbeiro=barbeiro, weekday=preview_date.weekday()
-    ).first()
+    rule = Availability.objects.filter(barbeiro=barbeiro, weekday=preview_date.weekday()).first()
     preview_slots = rule.gerar_slots(preview_date, barbeiro) if rule else []
 
-    offs = TimeOff.objects.filter(
-        barbeiro=barbeiro, end__gte=timezone.now()
-    ).order_by("start")[:20]
+    offs = TimeOff.objects.filter(barbeiro=barbeiro, end__gte=timezone.now()).order_by("start")[:20]
 
     return render(
         request,
@@ -549,39 +777,167 @@ def minha_agenda_config(request, shop_slug):
     )
 
 
+# ===================================================
+# AÇÕES DE AGENDAMENTO
+# ===================================================
+
+@require_shop_member
+@login_required
+@require_POST
+@transaction.atomic
+def finalizar(request, shop_slug, pk: int):
+    shop = get_object_or_404(BarberShop, slug=shop_slug)
+    ag = get_object_or_404(Agendamento.objects.select_related("cliente", "servico", "barbeiro"), pk=pk, shop=shop)
+
+    try:
+        ag.finalizar()
+        ag.save(update_fields=["status", "updated_at", "fim"])
+    except ValueError as e:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"ok": False, "error": "invalid_state", "detail": str(e)}, status=400)
+        messages.error(request, str(e))
+        return redirect(request.META.get("HTTP_REFERER") or "agendamentos:agenda_dia", shop_slug=shop.slug)
+
+    # Histórico do cliente
+    if ag.cliente_id:
+        cliente = ag.cliente
+        data_servico = ag.fim or ag.inicio
+        servico_label = ag.servico_nome or (ag.servico.nome if ag.servico_id else "Serviço")
+        profissional = (ag.barbeiro.get_full_name() or str(ag.barbeiro)) if ag.barbeiro_id else None
+
+        exists = HistoricoItem.objects.filter(
+            shop=shop, cliente=cliente, data=data_servico, servico=servico_label
+        ).exists()
+        if not exists:
+            HistoricoItem.objects.create(
+                shop=shop,
+                cliente=cliente,
+                data=data_servico,
+                servico=servico_label,
+                servico_ref=ag.servico if ag.servico_id else None,
+                valor=ag.preco_cobrado,
+                preco_tabela=getattr(ag.servico, "preco", None) if ag.servico_id else None,
+                faltou=False,
+                profissional=profissional or None,
+            )
+
+        if hasattr(cliente, "set_ultimo_corte"):
+            cliente.set_ultimo_corte(data_servico, save=True)
+        if hasattr(cliente, "refresh_recorrencia"):
+            cliente.refresh_recorrencia(save=True)
+
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "id": ag.id, "status": ag.status})
+
+    messages.success(request, "Atendimento finalizado.")
+    return redirect(request.META.get("HTTP_REFERER") or "agendamentos:agenda_dia", shop_slug=shop.slug)
+
+
+@require_shop_member
+@login_required
+@require_POST
+@transaction.atomic
+def no_show(request, shop_slug, pk: int):
+    shop = get_object_or_404(BarberShop, slug=shop_slug)
+    ag = get_object_or_404(Agendamento.objects.select_related("cliente", "servico"), pk=pk, shop=shop)
+
+    try:
+        ag.marcar_no_show()
+        ag.save(update_fields=["status", "updated_at"])
+    except ValueError as e:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"ok": False, "error": "invalid_state", "detail": str(e)}, status=400)
+        messages.error(request, str(e))
+        return redirect(request.META.get("HTTP_REFERER") or "agendamentos:agenda_dia", shop_slug=shop.slug)
+
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "id": ag.id, "status": ag.status})
+
+    messages.success(request, "No-show registrado.")
+    return redirect(request.META.get("HTTP_REFERER") or "agendamentos:agenda_dia", shop_slug=shop.slug)
+
+
+#generate slots helper
+def _aware_local(dt: datetime, tz):
+    if dt is None:
+        return None
+    return timezone.make_aware(dt, tz) if timezone.is_naive(dt) else dt.astimezone(tz)
+
+
+def _generate_slots(d: date, rule: Availability | None, timeoffs_qs):
+    """
+    Slots do dia com flags (available/reason) seguindo 'rule' + folgas.
+    """
+    tz = timezone.get_current_timezone()
+    if not rule or not rule.is_active:
+        return []
+
+    step = timedelta(minutes=rule.slot_minutes or 30)
+    start_dt = _aware_local(datetime.combine(d, rule.start_time), tz)
+    end_dt = _aware_local(datetime.combine(d, rule.end_time), tz)
+    lunch_st = _aware_local(datetime.combine(d, rule.lunch_start), tz) if rule.lunch_start else None
+    lunch_en = _aware_local(datetime.combine(d, rule.lunch_end), tz) if rule.lunch_end else None
+
+    # janela do dia e folgas no fuso
+    day_start = _aware_local(datetime.combine(d, time(0, 0)), tz)
+    day_end = day_start + timedelta(days=1)
+    offs = [
+        (off.start.astimezone(tz), off.end.astimezone(tz))
+        for off in timeoffs_qs.filter(start__lt=day_end, end__gt=day_start)
+    ]
+
+    slots = []
+    cur = start_dt
+    while cur < end_dt:
+        nxt = min(cur + step, end_dt)
+        available, reason = True, None
+
+        # almoço
+        if lunch_st and lunch_en and not (nxt <= lunch_st or cur >= lunch_en):
+            available, reason = False, "almoco"
+
+        # folga/bloqueio
+        if available and offs:
+            for off_st, off_en in offs:
+                if not (nxt <= off_st or cur >= off_en):
+                    available, reason = False, "folga"
+                    break
+
+        slots.append({"start": cur, "end": nxt, "available": available, "reason": reason})
+        cur = nxt
+    return slots
+
+
 # ---------------------------------------------------
 # NOVO AGENDAMENTO (manual, já CONFIRMADO)
 # ---------------------------------------------------
+@require_shop_member
 @login_required
 def agendamento_novo(request, shop_slug, solicitacao_id=None):
     """
-    Cria um agendamento **confirmado** (independente de Solicitação).
-    Sempre restrito ao barbeiro LOGADO e à barbearia (shop_slug) da URL.
+    Cria um agendamento CONFIRMADO (sempre para o barbeiro logado).
     """
     shop = get_object_or_404(BarberShop, slug=shop_slug)
 
-    # --------- parâmetros GET ----------
-    dia_param           = (request.GET.get("dia") or "").strip()
-    cliente_id          = (request.GET.get("cliente") or "").strip()
-    cliente_nome_param  = (request.GET.get("cliente_nome") or "").strip()
-    servico_id          = (request.GET.get("servico") or "").strip()
-    want_debug          = (request.GET.get("debug") == "1")
+    # parâmetros GET
+    dia_param = (request.GET.get("dia") or "").strip()
+    cliente_id = (request.GET.get("cliente") or "").strip()
+    cliente_nome_param = (request.GET.get("cliente_nome") or "").strip()
+    servico_id = (request.GET.get("servico") or "").strip()
+    want_debug = request.GET.get("debug") == "1"
 
     dia = _parse_date(dia_param, timezone.localdate())
-
-    # Barbeiro SEMPRE o usuário logado
     barbeiro = request.user
 
-    # --------- slots disponíveis ----------
+    # slots disponíveis
     slots_disponiveis = []
     debug_lines = []
     rule = Availability.objects.filter(barbeiro=barbeiro, weekday=dia.weekday()).first()
     if rule:
-        # Apenas slots marcados como available
         slots_disponiveis = [s for s in rule.gerar_slots(dia, barbeiro) if s.get("available")]
         if want_debug:
             offs_count = TimeOff.objects.filter(barbeiro=barbeiro, start__date=dia).count()
-            ags_count  = Agendamento.objects.filter(shop=shop, barbeiro=barbeiro, inicio__date=dia).count()
+            ags_count = Agendamento.objects.filter(shop=shop, barbeiro=barbeiro, inicio__date=dia).count()
             debug_lines += [
                 f"Dia: {dia.isoformat()}",
                 f"Barbeiro: {barbeiro} (id={barbeiro.pk})",
@@ -600,16 +956,16 @@ def agendamento_novo(request, shop_slug, solicitacao_id=None):
 
     debug_info = "\n".join(debug_lines) if want_debug else ""
 
-    # Horário selecionado (pode vir via GET ao clicar em um slot)
+    # horário selecionado
     sel_inicio = request.POST.get("inicio") or request.GET.get("inicio") or ""
 
-    # --------- montar form ----------
+    # montar form
     initial = {
         "status": StatusAgendamento.CONFIRMADO,
-        "barbeiro": barbeiro.pk,        # força barbeiro do logado
+        "barbeiro": barbeiro.pk,
     }
     if sel_inicio:
-        initial["inicio"] = sel_inicio  # ajuda a pré-popular no form
+        initial["inicio"] = sel_inicio
     if cliente_id and cliente_id.isdigit():
         initial["cliente"] = int(cliente_id)
     if cliente_nome_param:
@@ -620,34 +976,34 @@ def agendamento_novo(request, shop_slug, solicitacao_id=None):
     if request.method == "POST":
         form = AgendamentoForm(request.POST, initial=initial)
         if form.is_valid():
-            ag = form.save(commit=False)
-            ag.shop = shop
-            ag.barbeiro = barbeiro                         # força barbeiro do logado
-            ag.status = StatusAgendamento.CONFIRMADO       # confirmado por definição
+            with transaction.atomic():
+                ag = form.save(commit=False)
+                ag.shop = shop
+                ag.barbeiro = barbeiro
+                ag.status = StatusAgendamento.CONFIRMADO
 
-            # snapshots
-            if ag.servico and not ag.servico_nome:
-                ag.servico_nome = ag.servico.nome
-            if ag.cliente_id and not ag.cliente_nome:
-                ag.cliente_nome = ag.cliente.nome or ag.cliente_nome
+                # snapshots
+                if ag.servico and not ag.servico_nome:
+                    ag.servico_nome = ag.servico.nome
+                if ag.cliente_id and not ag.cliente_nome:
+                    ag.cliente_nome = ag.cliente.nome or ag.cliente_nome
 
-            # garante fim
-            if not ag.fim:
-                ag.calcular_fim_pelo_servico()
+                # garante fim
+                if not ag.fim:
+                    ag.calcular_fim_pelo_servico()
 
-            # conflito (para o barbeiro logado)
-            if ag.inicio and ag.fim:
-                if Agendamento.existe_conflito(barbeiro, ag.inicio, ag.fim):
+                # conflito (global por barbeiro; se quiser por loja, passe shop=shop)
+                if ag.inicio and ag.fim and Agendamento.existe_conflito(barbeiro, ag.inicio, ag.fim):
                     form.add_error(None, "Conflito de horário para este barbeiro.")
 
-            if not form.errors:
-                ag.save()
-                messages.success(request, "Atendimento criado com sucesso.")
-                return redirect("agendamentos:agenda_dia", shop_slug=shop.slug)
+                if not form.errors:
+                    ag.save()
+                    messages.success(request, "Atendimento criado com sucesso.")
+                    return redirect("agendamentos:agenda_dia", shop_slug=shop.slug)
     else:
         form = AgendamentoForm(initial=initial)
 
-    # Aplicar preço sugerido se serviço veio por GET
+    # preço sugerido
     if not form.is_bound and servico_id and servico_id.isdigit():
         try:
             servico_sel = form.fields["servico"].queryset.get(pk=int(servico_id))
@@ -655,7 +1011,7 @@ def agendamento_novo(request, shop_slug, solicitacao_id=None):
         except Exception:
             pass
 
-    # reconstruir URL ao trocar dados (preserva alguns params úteis)
+    # reconstruir URL preservando params úteis
     preserve_params = {}
     if cliente_id:
         preserve_params["cliente"] = cliente_id
@@ -675,3 +1031,14 @@ def agendamento_novo(request, shop_slug, solicitacao_id=None):
         "sel_inicio": sel_inicio,
     }
     return render(request, "agendamentos/agendamento_form.html", ctx)
+
+
+
+
+
+
+
+
+
+
+

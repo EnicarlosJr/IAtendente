@@ -5,29 +5,78 @@
 {% block content %}
 <div class="mx-auto max-w-5xl space-y-6">
 
-  <div class="card p-4">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold">Convidar usuário</h2>
-      <span class="pill bg-slate-100 text-slate-700">{{ shop.nome }}</span>
+  {# ================= Cabeçalho / Contexto ================= #}
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <h2 class="text-base font-semibold text-slate-900">Gerenciar usuários</h2>
+      <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs">
+        🏬 {{ shop.nome }}
+      </span>
     </div>
-    <form class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3"
-          method="post" action="{% url 'barbearias:usuarios_convidar' %}">
-      {% csrf_token %}
-      <input type="email" name="email" required placeholder="email@exemplo.com" class="rounded-lg border px-3 py-2">
-      <select name="role" class="rounded-lg border px-3 py-2">
-        {% for v,l in membros.model._meta.get_field('role').choices %}
-          <option value="{{ v }}">{{ l }}</option>
-        {% endfor %}
-      </select>
-      <button class="btn btn-primary">Convidar</button>
-    </form>
-    <p class="text-xs text-slate-500 mt-2">Se o e-mail não existir, o usuário será criado e vinculado a esta barbearia.</p>
+    <div class="flex items-center gap-2 text-xs text-slate-500">
+      <span>Total:</span>
+      <span class="font-medium">{{ membros|length }}</span>
+    </div>
   </div>
 
-  <div class="card overflow-hidden">
+  {# ================= Barra de ferramentas ================= #}
+  <div class="card p-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex-1">
+      <label class="sr-only" for="user-search">Buscar usuário</label>
+      <input id="user-search" type="search"
+             placeholder="Buscar por nome ou e-mail…"
+             class="w-full rounded-lg border px-3 py-2"
+             oninput="filterMembers(this.value)">
+    </div>
+
+    {% if is_manager %}
+      <div class="flex items-center gap-2">
+{# ================= Adicionar (somente manager/owner) ================= #}
+{% if is_manager %}
+<section class="card p-4">
+  <div class="flex items-start sm:items-center justify-between gap-3">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-900">Adicionar usuário</h3>
+      <p class="text-xs text-slate-500 mt-1">
+        Se o e-mail não existir, criaremos o usuário. Se já existir, apenas vinculamos/reativamos na barbearia.
+      </p>
+    </div>
+    <span class="pill bg-slate-100 text-slate-700 hidden sm:inline-flex">OWNER / MANAGER</span>
+  </div>
+
+  <form class="mt-4 grid grid-cols-1 sm:grid-cols-5 gap-3"
+        method="post" action="{% url 'barbearias:usuarios_adicionar' shop.slug %}">
+    {% csrf_token %}
+    <input type="text" name="name" placeholder="Nome (opcional)" class="rounded-lg border px-3 py-2" />
+    <input type="email" name="email" required placeholder="email@exemplo.com" class="rounded-lg border px-3 py-2" />
+    <select name="role" class="rounded-lg border px-3 py-2">
+      {% for v,l in role_choices %}
+        <option value="{{ v }}">{{ l }}</option>
+      {% endfor %}
+    </select>
+    <input type="password" name="password" placeholder="Senha (novo usuário)" class="rounded-lg border px-3 py-2" />
+    <button class="btn btn-primary">Adicionar</button>
+  </form>
+
+  <p class="text-[11px] text-slate-500 mt-2">
+    Por segurança, a senha só é definida quando o usuário é criado agora. Para usuários existentes, não alteramos a senha aqui.
+  </p>
+</section>
+{% endif %}
+
+      </div>
+    {% endif %}
+  </div>
+
+  {# ================= Lista de membros ================= #}
+  <section class="card overflow-hidden" id="members-card">
     <div class="px-4 py-3 soft-divider flex items-center justify-between">
-      <h2 class="text-lg font-semibold">Membros</h2>
-      <span class="pill bg-slate-100 text-slate-700">{{ membros|length }} no total</span>
+      <h3 class="text-sm font-semibold text-slate-900">Membros</h3>
+      <div class="flex items-center gap-2 text-[11px]">
+        <span class="pill bg-emerald-100 text-emerald-700">Ativo</span>
+        <span class="pill bg-slate-100 text-slate-700">Inativo</span>
+        <span class="pill bg-indigo-100 text-indigo-700">OWNER</span>
+      </div>
     </div>
 
     <div class="overflow-x-auto">
@@ -41,55 +90,154 @@
             <th class="px-4 py-3 font-medium text-right">Ações</th>
           </tr>
         </thead>
-        <tbody class="divide-y">
+        <tbody class="divide-y" id="members-tbody">
           {% for m in membros %}
-            <tr>
-              <td class="px-4 py-3">{{ m.user.get_full_name|default:m.user.username }}</td>
-              <td class="px-4 py-3">{{ m.user.email }}</td>
-              <td class="px-4 py-3">
-                <form method="post" action="{% url 'barbearias:usuarios_atualizar' m.id %}" class="inline-flex items-center gap-2">
-                  {% csrf_token %}
-                  <select name="role" class="rounded-md border px-2 py-1 text-xs">
-                    {% for v,l in m._meta.get_field('role').choices %}
-                      <option value="{{ v }}" {% if m.role == v %}selected{% endif %}>{{ l }}</option>
-                    {% endfor %}
-                  </select>
-                  <input type="hidden" name="is_active" value="{{ m.is_active|yesno:'on,off' }}">
-                  <button class="btn btn-outline">Salvar</button>
-                </form>
-              </td>
-              <td class="px-4 py-3">
+          <tr class="hover:bg-slate-50"
+              data-name="{{ m.user.get_full_name|default:m.user.username|lower }}"
+              data-email="{{ m.user.email|default:''|lower }}">
+            <td class="px-4 py-3">
+              <div class="font-medium">{{ m.user.get_full_name|default:m.user.username }}</div>
+              <div class="text-xs text-slate-500">
+                Criado: {{ m.user.date_joined|date:"d/m/Y H:i"|default:"—" }}
+              </div>
+            </td>
+
+            <td class="px-4 py-3">
+              {{ m.user.email|default:"—" }}
+            </td>
+
+            <td class="px-4 py-3">
+              <form method="post"
+                    action="{% url 'barbearias:usuarios_atualizar' shop.slug m.id %}"
+                    class="inline-flex items-center gap-2">
+                {% csrf_token %}
+                {# Desabilita se não for manager OU se o membro for OWNER #}
+                <select name="role" class="rounded-md border px-2 py-1 text-xs"
+                        {% if not is_manager or m.role == 'OWNER' %}disabled{% endif %}
+                        {% if m.role == 'OWNER' %}title="Não é possível alterar o OWNER"{% endif %}>
+                  {% for v,l in role_choices %}
+                    <option value="{{ v }}" {% if m.role == v %}selected{% endif %}>{{ l }}</option>
+                  {% endfor %}
+                </select>
+
+                <input type="hidden" name="is_active" value="{{ m.is_active|yesno:'on,off' }}">
+                <button class="btn btn-outline text-xs"
+                        {% if not is_manager or m.role == 'OWNER' %}disabled{% endif %}
+                        {% if m.role == 'OWNER' %}title="Não é possível alterar o OWNER"{% endif %}>
+                  Salvar
+                </button>
+              </form>
+            </td>
+
+            <td class="px-4 py-3">
+              {% if m.is_active %}
+                <span class="pill bg-emerald-100 text-emerald-700">Ativo</span>
+              {% else %}
+                <span class="pill bg-slate-100 text-slate-700">Inativo</span>
+              {% endif %}
+            </td>
+
+            <td class="px-4 py-3">
+              <div class="flex justify-end gap-2">
                 {% if m.is_active %}
-                  <span class="pill bg-emerald-100 text-emerald-700">Ativo</span>
+                  <form method="post" action="{% url 'barbearias:usuarios_remover' shop.slug m.id %}">
+                    {% csrf_token %}
+                    <button class="btn btn-outline text-xs"
+                            {% if not is_manager or m.role == 'OWNER' or m.user_id == request.user.id %}disabled{% endif %}
+                            {% if m.role == 'OWNER' %}title="Não é possível desativar o OWNER"{% endif %}
+                            {% if m.user_id == request.user.id %}title="Você não pode se desativar"{% endif %}
+                            onclick="return confirm('Desativar este membro?');">
+                      Desativar
+                    </button>
+                  </form>
                 {% else %}
-                  <span class="pill bg-slate-100 text-slate-700">Inativo</span>
+                  <form method="post" action="{% url 'barbearias:usuarios_atualizar' shop.slug m.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="role" value="{{ m.role }}">
+                    <input type="hidden" name="is_active" value="on">
+                    <button class="btn btn-primary text-xs"
+                            {% if not is_manager %}disabled title="Sem permissão"{% endif %}>
+                      Reativar
+                    </button>
+                  </form>
                 {% endif %}
-              </td>
-              <td class="px-4 py-3">
-                <div class="flex justify-end gap-2">
-                  {% if m.is_active %}
-                    <form method="post" action="{% url 'barbearias:usuarios_remover' m.id %}">
-                      {% csrf_token %}
-                      <button class="btn btn-outline">Desativar</button>
-                    </form>
-                  {% else %}
-                    <form method="post" action="{% url 'barbearias:usuarios_atualizar' m.id %}">
-                      {% csrf_token %}
-                      <input type="hidden" name="role" value="{{ m.role }}">
-                      <input type="hidden" name="is_active" value="on">
-                      <button class="btn btn-primary">Reativar</button>
-                    </form>
-                  {% endif %}
-                </div>
-              </td>
-            </tr>
+              </div>
+            </td>
+          </tr>
           {% empty %}
-            <tr><td colspan="5" class="px-4 py-8 text-center text-slate-500">Nenhum membro cadastrado.</td></tr>
+          <tr>
+{# ================= Adicionar (somente manager/owner) ================= #}
+{% if is_manager %}
+<section class="card p-4">
+  <div class="flex items-start sm:items-center justify-between gap-3">
+    <div>
+      <h3 class="text-sm font-semibold text-slate-900">Adicionar usuário</h3>
+      <p class="text-xs text-slate-500 mt-1">
+        Se o e-mail não existir, criaremos o usuário. Se já existir, apenas vinculamos/reativamos na barbearia.
+      </p>
+    </div>
+    <span class="pill bg-slate-100 text-slate-700 hidden sm:inline-flex">OWNER / MANAGER</span>
+  </div>
+
+        <form class="mt-4 grid grid-cols-1 sm:grid-cols-5 gap-3"
+              method="post" action="{% url 'barbearias:usuarios_adicionar' shop.slug %}">
+          {% csrf_token %}
+          <input type="text" name="name" placeholder="Nome (opcional)" class="rounded-lg border px-3 py-2" />
+          <input type="email" name="email" required placeholder="email@exemplo.com" class="rounded-lg border px-3 py-2" />
+          <select name="role" class="rounded-lg border px-3 py-2">
+            {% for v,l in role_choices %}
+              <option value="{{ v }}">{{ l }}</option>
+            {% endfor %}
+          </select>
+          <input type="password" name="password" placeholder="Senha (novo usuário)" class="rounded-lg border px-3 py-2" />
+          <button class="btn btn-primary">Adicionar</button>
+        </form>
+
+        <p class="text-[11px] text-slate-500 mt-2">
+          Por segurança, a senha só é definida quando o usuário é criado agora. Para usuários existentes, não alteramos a senha aqui.
+        </p>
+      </section>
+      {% endif %}
+
+          </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-  </div>
+  </section>
+
+  {# ================= Dicas rápidas ================= #}
+  <section class="card p-4">
+    <h4 class="text-sm font-semibold text-slate-900">Dicas</h4>
+    <ul class="mt-2 text-xs space-y-1 text-slate-600">
+      <li>• Somente <strong>OWNER</strong> e <strong>MANAGER</strong> podem gerenciar usuários.</li>
+      <li>• O <strong>OWNER</strong> não pode ser desativado nem ter o papel alterado.</li>
+      <li>• Você não pode desativar a si mesmo.</li>
+    </ul>
+  </section>
 
 </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Filtro simples por nome/e-mail (client-side)
+  function filterMembers(query) {
+    const q = (query || '').trim().toLowerCase();
+    const rows = document.querySelectorAll('#members-tbody tr');
+    rows.forEach(tr => {
+      const name  = tr.getAttribute('data-name')  || '';
+      const email = tr.getAttribute('data-email') || '';
+      const show = !q || name.includes(q) || email.includes(q);
+      tr.style.display = show ? '' : 'none';
+    });
+  }
+
+  // Abre o popover de convite (detalhes do "Convidar usuário")
+  function openInvite() {
+    const summary = document.querySelector('details > summary.btn.btn-primary');
+    if (summary) summary.click();
+  }
+</script>
 {% endblock %}

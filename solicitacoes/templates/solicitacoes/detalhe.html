@@ -3,7 +3,6 @@
 {% load l10n %}
 
 {% block title %}{% if tipo == 'agendamento' %}Agendamento{% else %}Solicitação{% endif %} #{{ obj.id }}{% endblock %}
-{% block header %}{% if tipo == 'agendamento' %}Agendamento{% else %}Solicitação{% endif %} #{{ obj.id }}{% endblock %}
 
 {% block content %}
 <div class="mx-auto max-w-5xl px-4 py-6 space-y-6">
@@ -61,8 +60,15 @@
 
         <div>
           <span class="text-gray-500">Preço:</span>
-          {% firstof obj.preco_cobrado obj.preco_cotado obj.preco as preco %}
-          {% if preco is not None %} R$ {{ preco|floatformat:2|localize }} {% else %} — {% endif %}
+          {% if obj.preco_cobrado is not None %}
+            R$ {{ obj.preco_cobrado|floatformat:2|localize }}
+          {% elif obj.preco_cotado is not None %}
+            R$ {{ obj.preco_cotado|floatformat:2|localize }}
+          {% elif obj.preco %}
+            R$ {{ obj.preco|floatformat:2|localize }}
+          {% else %}
+            —
+          {% endif %}
         </div>
 
         <div>
@@ -71,7 +77,9 @@
         </div>
 
         <div>
-          <span class="text-gray-500">{% if tipo == 'agendamento' %}Início{% else %}Preferência / Início{% endif %}:</span>
+          <span class="text-gray-500">
+            {% if tipo == 'agendamento' %}Início{% else %}Preferência / Início{% endif %}:
+          </span>
           {% if obj.inicio %} {{ obj.inicio|date:"d/m/Y H:i" }} {% else %} — {% endif %}
         </div>
 
@@ -88,7 +96,11 @@
         {% endif %}
 
         <div class="text-xs text-gray-500 pt-2">
-          Criado em {{ obj.criado_em|date:"d/m/Y H:i"|default:"—" }}
+          {% if obj.criado_em %}
+            Criado em {{ obj.criado_em|date:"d/m/Y H:i" }}
+          {% else %}
+            Criado em —
+          {% endif %}
         </div>
       </div>
     </div>
@@ -109,7 +121,10 @@
               <label class="text-sm text-gray-700">Horário de início</label>
               <input type="datetime-local" name="inicio"
                      value="{% if obj.inicio %}{{ obj.inicio|date:'Y-m-d\\TH:i' }}{% endif %}"
-                     class="rounded-xl border px-3 py-2 w-full" required>
+                     class="rounded-xl border px-3 py-2 w-full">
+              <p class="text-xs text-gray-500 mt-1">
+                Se não preencher, será usado o horário já definido na solicitação.
+              </p>
             </div>
 
             <div>
@@ -151,16 +166,16 @@
 
       {% else %}
 
-      {# === Ações para AGENDAMENTO === #}
+        {# === Ações para AGENDAMENTO === #}
         <div class="bg-white rounded-2xl border p-4">
           <h3 class="text-sm font-semibold text-gray-900 tracking-wide uppercase mb-3">Pós-atendimento</h3>
 
           <div class="flex flex-wrap gap-2">
-            <form method="post" action="{% url 'solicitacoes:finalizar' shop.slug obj.id %}">
+            <form method="post" action="{% url 'agendamentos:finalizar' shop.slug obj.id %}">
               {% csrf_token %}
               <button class="rounded-xl px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700">Finalizar</button>
             </form>
-            <form method="post" action="{% url 'solicitacoes:no_show' shop.slug obj.id %}">
+            <form method="post" action="{% url 'agendamentos:no_show' shop.slug obj.id %}">
               {% csrf_token %}
               <button class="rounded-xl px-4 py-2 bg-amber-600 text-white hover:bg-amber-700">Marcar no-show</button>
             </form>

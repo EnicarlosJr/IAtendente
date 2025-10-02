@@ -83,3 +83,19 @@
 }
 .input::placeholder{ color:#94a3b8; }
 
+.btn-action {
+  @apply inline-flex items-center justify-center rounded-md px-3 py-1.5 text-sm transition font-medium;
+}
+.btn-primary {
+  @apply bg-emerald-600 text-white hover:bg-emerald-700;
+}
+.btn-danger {
+  @apply bg-rose-600 text-white hover:bg-rose-700;
+}
+.btn-warning {
+  @apply bg-yellow-500 text-white hover:bg-yellow-600;
+}
+.btn-secondary {
+  @apply border text-gray-700 hover:bg-gray-50;
+}
+

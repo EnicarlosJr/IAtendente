@@ -5,90 +5,120 @@
 {% block content %}
 {% include "agendamentos/_agenda_tabs.html" %}
 
-<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+<div class="card overflow-hidden">
 
-  <!-- Cabeçalho -->
-  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-    <div class="font-semibold">{{ ref_date|date:"F Y" }}</div>
+  {# ---------- Cabeçalho ---------- #}
+  <div class="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-200 bg-slate-50/70 backdrop-blur">
+    <h2 class="text-lg font-semibold text-slate-900">{{ ref_date|date:"F Y" }}</h2>
     <div class="flex gap-2">
-      <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+      <a class="btn btn-secondary"
          href="{% url 'agendamentos:agenda_mes' shop.slug %}?data={{ prev_month|date:'Y-m-d' }}">← Anterior</a>
-      <a class="text-sm px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50"
+      <a class="btn btn-secondary"
          href="{% url 'agendamentos:agenda_mes' shop.slug %}?data={{ next_month|date:'Y-m-d' }}">Próximo →</a>
     </div>
   </div>
 
-  <!-- Labels dos dias da semana -->
-  <div class="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
-    {% for label in dias_semana %}
-      <div class="text-center text-xs font-medium text-gray-600 py-2">{{ label }}</div>
-    {% endfor %}
-  </div>
-
-  <!-- Grade do mês -->
-  <div class="grid grid-cols-7 gap-px bg-gray-200">
-    {# Células em branco antes do dia 1 (vêm prontas da view) #}
-    {% for _ in blank_cells %}
-      <div class="bg-white min-h-[110px]"></div>
-    {% endfor %}
-
-    {# Dias do mês, em ordem #}
-    {% for dia, items in por_dia.items %}
-      <div class="bg-white min-h-[110px] p-2">
-        <div class="flex items-center justify-between">
-          <div class="text-xs text-gray-500">
-            <a href="{% url 'agendamentos:agenda_dia' shop.slug %}?dia={{ dia|date:'Y-m-d' }}"
-               class="hover:underline">{{ dia|date:"d" }}</a>
-          </div>
-          {% if items %}
-            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">{{ items|length }}</span>
-          {% endif %}
-        </div>
-
-        <ul class="mt-1 space-y-1">
-          {% for ag in items %}
-            <li class="text-xs rounded border border-gray-200 px-2 py-1">
-              <span class="font-medium">
-                {% if ag.inicio %}{{ ag.inicio|date:"H:i" }}{% else %}--:--{% endif %}
-              </span>
-              ·
-              {# Nome do cliente: cliente.nome -> cliente_nome -> nome -> telefone -> "—" #}
-              {% if ag.cliente and ag.cliente.nome %}
-                {{ ag.cliente.nome }}
-              {% elif ag.cliente_nome %}
-                {{ ag.cliente_nome }}
-              {% elif ag.nome %}
-                {{ ag.nome }}
-              {% elif ag.telefone %}
-                {{ ag.telefone }}
-              {% else %}
-                —
-              {% endif %}
-
-              {# Serviço (opcional) #}
-              {% if ag.servico and ag.servico.nome %}
-                <span class="text-gray-600">· {{ ag.servico.nome }}</span>
-              {% elif ag.servico %}
-                <span class="text-gray-600">· {{ ag.servico }}</span>
-              {% endif %}
-
-              {# Status #}
-              {% with st=ag.status|stringformat:"s" %}
-              <span class="ml-1 inline-block align-middle text-[10px] px-1.5 py-0.5 rounded-full
-                {% if st == 'CONFIRMADA' or st == 'CONFIRMADO' %} bg-emerald-100 text-emerald-700
-                {% elif st == 'PENDENTE' %}                         bg-amber-100 text-amber-700
-                {% elif st == 'NEGADA' or st == 'CANCELADA' %}      bg-rose-100 text-rose-700
-                {% else %}                                           bg-gray-100 text-gray-700 {% endif %}">
-                {{ st }}
-              </span>
-              {% endwith %}
-            </li>
-          {% empty %}
-            {# sem itens: deixa só o número do dia #}
+  {# ---------- Calendário (tabela) ---------- #}
+  <div class="overflow-x-auto">
+    <table class="w-full table-fixed border-separate border-spacing-0 text-sm">
+      <thead class="bg-slate-50">
+        <tr>
+          {% for label in dias_semana %}
+            <th class="px-3 py-2 font-semibold text-slate-600 border-b border-slate-200">{{ label }}</th>
           {% endfor %}
-        </ul>
-      </div>
-    {% endfor %}
+        </tr>
+      </thead>
+
+      <tbody>
+        {% now "Y-m-d" as today_str %}
+        <tr>
+          {# células em branco antes do dia 1 #}
+          {% for _ in blank_cells %}
+            <td class="h-28 align-top border-b border-r border-slate-200 bg-white"></td>
+          {% endfor %}
+
+          {% with blanks_len=blank_cells|length %}
+          {# dias do mês #}
+          {% for dia, items in por_dia.items %}
+            <td class="h-28 align-top border-b {% if not forloop.last %}border-r{% endif %} border-slate-200 bg-white p-2">
+              <!-- topo da célula -->
+              <div class="flex items-center justify-between">
+                <a href="{% url 'agendamentos:agenda_dia' shop.slug %}?dia={{ dia|date:'Y-m-d' }}"
+                   class="text-xs {% if dia|date:'Y-m-d' == today_str %}font-semibold text-emerald-700{% else %}ia-text-muted{% endif %} hover:underline">
+                  {{ dia|date:"d" }}
+                </a>
+                {% if items %}
+                  <span class="pill bg-slate-100 text-slate-700 text-[10px]">{{ items|length }}</span>
+                {% endif %}
+              </div>
+
+              <!-- lista do dia -->
+              <ul class="mt-1 space-y-1">
+                {% for ag in items|slice:":4" %}
+                  {% with st=ag.status|stringformat:"s"|upper %}
+                    <li class="rounded-lg border p-2 text-[12px] hover:shadow-sm transition
+                               {% if st in 'CONFIRMADA CONFIRMADO' %} border-blue-200 bg-blue-50/60
+                               {% elif st == 'PENDENTE' %}        border-amber-200 bg-amber-50/60
+                               {% elif st in 'NEGADA CANCELADA' %} border-rose-200 bg-rose-50/60
+                               {% else %}                           border-slate-200 bg-white {% endif %}">
+                      <div class="flex items-center justify-between gap-2">
+                        <div class="font-medium text-slate-900">
+                          {% if ag.inicio %}{{ ag.inicio|date:"H:i" }}{% else %}--:--{% endif %}
+                        </div>
+                        <span class="pill text-[10px]
+                          {% if st in 'CONFIRMADA CONFIRMADO' %} bg-blue-100 text-blue-700
+                          {% elif st == 'PENDENTE' %}            bg-amber-100 text-amber-800
+                          {% elif st in 'NEGADA CANCELADA' %}     bg-rose-100 text-rose-700
+                          {% else %}                               bg-slate-100 text-slate-700 {% endif %}">
+                          {{ ag.status }}
+                        </span>
+                      </div>
+
+                      <div class="mt-0.5 truncate">
+                        <span class="font-semibold">
+                          {% if ag.cliente and ag.cliente.nome %}
+                            {{ ag.cliente.nome }}
+                          {% elif ag.cliente_nome %}
+                            {{ ag.cliente_nome }}
+                          {% elif ag.nome %}
+                            {{ ag.nome }}
+                          {% elif ag.telefone %}
+                            {{ ag.telefone }}
+                          {% else %}
+                            —
+                          {% endif %}
+                        </span>
+                        {% if ag.servico and ag.servico.nome %}
+                          <span class="ia-text-muted"> · {{ ag.servico.nome }}</span>
+                        {% elif ag.servico %}
+                          <span class="ia-text-muted"> · {{ ag.servico }}</span>
+                        {% endif %}
+                      </div>
+
+                      <div class="mt-1">
+                        <a href="{% url 'solicitacoes:detalhe' shop.slug ag.id %}" class="text-[11px] underline">Ver detalhes</a>
+                      </div>
+                    </li>
+                  {% endwith %}
+                {% endfor %}
+
+                {% if items|length > 4 %}
+                  <li class="text-[11px] ia-text-muted">+{{ items|length|add:"-4" }} mais…</li>
+                {% endif %}
+              </ul>
+            </td>
+
+            {# quebra de linha a cada 7 colunas (contando os blanks iniciais) #}
+            {% with colpos=forloop.counter0|add:blanks_len %}
+              {% if colpos|add:"1"|divisibleby:7 and not forloop.last %}
+                </tr><tr>
+              {% endif %}
+            {% endwith %}
+          {% endfor %}
+          {% endwith %}
+        </tr>
+      </tbody>
+    </table>
   </div>
 </div>
 {% endblock %}

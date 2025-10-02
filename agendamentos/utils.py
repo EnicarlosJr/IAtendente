@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, date, time
 from django.utils import timezone
 from .models import BarberAvailability, BarberTimeOff
+from django.utils import timezone
 
 def _aware(dt_naive, tz):
     return timezone.make_aware(dt_naive, tz)
@@ -47,3 +48,15 @@ def subtract_timeoffs(barber, slots: list[datetime]):
                 return True
         return False
     return [dt for dt in slots if not covered(dt)]
+
+
+
+def montar_intervalos(qs, tz):
+    """
+    Transforma queryset de agendamentos em lista normalizada [(start, end, ag)] no fuso correto.
+    """
+    return [
+        (timezone.localtime(a.inicio, tz), timezone.localtime(a.fim, tz), a)
+        for a in qs.order_by("inicio")
+    ]
+   

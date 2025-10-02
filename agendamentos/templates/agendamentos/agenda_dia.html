@@ -5,31 +5,31 @@
 {% block content %}
 {% include "agendamentos/_agenda_tabs.html" %}
 
-<div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+<div class="card overflow-hidden">
 
   <!-- Cabeçalho -->
-  <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
-    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+  <div class="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-200 bg-slate-50/70 backdrop-blur">
+    <h2 class="text-lg font-semibold text-slate-900 flex items-center gap-2">
       <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-blue-100 text-blue-600">📅</span>
       Dia {{ date|date:"d/m/Y" }}
     </h2>
     <div class="flex gap-2">
-      <a class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-sm"
+      <a class="btn btn-secondary"
          href="{% url 'agendamentos:agenda_dia' shop.slug %}?dia={{ prev_day|date:'Y-m-d' }}">← Anterior</a>
-      <a class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-sm"
+      <a class="btn btn-secondary"
          href="{% url 'agendamentos:agenda_dia' shop.slug %}?dia={{ next_day|date:'Y-m-d' }}">Próximo →</a>
     </div>
   </div>
 
   {% if rows|length == 0 %}
-    <div class="p-6 text-sm text-slate-600">Sem horários configurados para este dia.</div>
+    <div class="p-6 text-sm ia-text-muted">Sem horários configurados para este dia.</div>
   {% else %}
 
   <!-- GRID DE PERÍODOS -->
   <div class="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200">
 
     {# ================== MANHÃ ================== #}
-    <section class="p-6">
+    <section class="p-5 sm:p-6">
       <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">🌅 Manhã</h3>
       <div class="relative">
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
@@ -39,13 +39,13 @@
               {% if row.time|date:"H" < '12' %}
                 {% with had_any=true %}
                   <div class="relative pl-14">
-                    {% include "agendamentos/_agenda_card.html" with row=row %}
+                    {% include "agendamentos/_agenda_card.html" with row=row shop=shop %}
                   </div>
                 {% endwith %}
               {% endif %}
             {% endfor %}
             {% if not had_any %}
-              <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+              <p class="text-sm ia-text-muted">Nenhum horário neste período.</p>
             {% endif %}
           {% endwith %}
         </div>
@@ -53,7 +53,7 @@
     </section>
 
     {# ================== TARDE ================== #}
-    <section class="p-6">
+    <section class="p-5 sm:p-6">
       <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">🌇 Tarde</h3>
       <div class="relative">
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
@@ -63,13 +63,13 @@
               {% if row.time|date:"H" >= '12' and row.time|date:"H" < '18' %}
                 {% with had_any=true %}
                   <div class="relative pl-14">
-                    {% include "agendamentos/_agenda_card.html" with row=row %}
+                    {% include "agendamentos/_agenda_card.html" with row=row shop=shop %}
                   </div>
                 {% endwith %}
               {% endif %}
             {% endfor %}
             {% if not had_any %}
-              <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+              <p class="text-sm ia-text-muted">Nenhum horário neste período.</p>
             {% endif %}
           {% endwith %}
         </div>
@@ -77,7 +77,7 @@
     </section>
 
     {# ================== NOITE ================== #}
-    <section class="p-6">
+    <section class="p-5 sm:p-6">
       <h3 class="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">🌙 Noite</h3>
       <div class="relative">
         <div class="absolute left-5 top-0 bottom-0 w-0.5 bg-slate-200"></div>
@@ -87,13 +87,13 @@
               {% if row.time|date:"H" >= '18' %}
                 {% with had_any=true %}
                   <div class="relative pl-14">
-                    {% include "agendamentos/_agenda_card.html" with row=row %}
+                    {% include "agendamentos/_agenda_card.html" with row=row shop=shop %}
                   </div>
                 {% endwith %}
               {% endif %}
             {% endfor %}
             {% if not had_any %}
-              <p class="text-sm text-slate-500">Nenhum horário neste período.</p>
+              <p class="text-sm ia-text-muted">Nenhum horário neste período.</p>
             {% endif %}
           {% endwith %}
         </div>

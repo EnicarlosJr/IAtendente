@@ -1,6 +1,7 @@
+# agendamentos/models.py
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from django.conf import settings
 from django.db import models
 from django.db.models import Q, F
@@ -12,7 +13,11 @@ User = settings.AUTH_USER_MODEL
 class StatusAgendamento(models.TextChoices):
     CONFIRMADO = "CONFIRMADO", "Confirmado"
     CANCELADO  = "CANCELADO",  "Cancelado"
-    REALIZADO  = "REALIZADO",  "Realizado"
+    # Novo conjunto canônico:
+    FINALIZADO = "FINALIZADO", "Finalizado"
+    NO_SHOW    = "NO_SHOW",    "No-show"
+    # Retrocompat (linhas antigas podem ter REALIZADO)
+    REALIZADO  = "REALIZADO",  "Realizado"  # mantido para não quebrar dados antigos
 
 
 class Agendamento(models.Model):
@@ -20,10 +25,15 @@ class Agendamento(models.Model):
     Evento canônico da agenda.
     Só existe se a solicitação for confirmada ou se o barbeiro criar direto.
     """
-    shop = models.ForeignKey("barbearias.BarberShop", on_delete=models.CASCADE, related_name="agendamentos")
+    shop = models.ForeignKey(
+        "barbearias.BarberShop",
+        on_delete=models.CASCADE,
+        related_name="agendamentos",
+    )
+
     solicitacao = models.OneToOneField(
         "solicitacoes.Solicitacao",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name="agendamento",
         null=True, blank=True,
     )
@@ -58,9 +68,9 @@ class Agendamento(models.Model):
     fim    = models.DateTimeField(null=True, blank=True)
 
     status = models.CharField(
-        max_length=10,
+        max_length=20,
         choices=StatusAgendamento.choices,
-        default=StatusAgendamento.CONFIRMADO,  # ✅ nasce confirmado
+        default=StatusAgendamento.CONFIRMADO,  # nasce confirmado
     )
     observacoes = models.TextField(null=True, blank=True)
 
@@ -74,17 +84,20 @@ class Agendamento(models.Model):
             models.Index(fields=["status"]),
             models.Index(fields=["barbeiro", "inicio"]),
             models.Index(fields=["cliente", "inicio"]),
+            models.Index(fields=["shop", "inicio"]),
         ]
         constraints = [
+            # fim pode ser NULL; quando não for, precisa ser > início
             models.CheckConstraint(
-                name="ag_fim_gt_inicio",
-                check=Q(fim__gt=F("inicio")),
+                name="ag_fim_gt_inicio_or_null",
+                check=Q(fim__isnull=True) | Q(fim__gt=F("inicio")),
             ),
         ]
 
+    # ----------------- util -----------------
     def __str__(self):
         nome = self.cliente_nome or (self.cliente.nome if self.cliente_id else "—")
-        return f"{nome} — {self.servico_nome or 'Serviço'} ({self.inicio:%d/%m %H:%M})"
+        return f"{nome} — {self.servico_nome or 'Serviço'} ({timezone.localtime(self.inicio):%d/%m %H:%M})"
 
     def calcular_fim_pelo_servico(self):
         """
@@ -96,24 +109,80 @@ class Agendamento(models.Model):
             self.fim = self.inicio + timedelta(minutes=int(minutos))
         return self.fim
 
-    def save(self, *args, **kwargs):
-        # garante 'fim' antes de persistir
-        if not self.fim:
+    def _ensure_fim(self, when=None):
+        """Garante self.fim coerente (pelo serviço; senão, agora)."""
+        if self.fim:
+            return
+        if when:
+            self.fim = max(self.inicio or when, when)
+            return
+        if hasattr(self, "calcular_fim_pelo_servico"):
             self.calcular_fim_pelo_servico()
+        if not self.fim:
+            now = timezone.now()
+            self.fim = max(self.inicio or now, now)
+
+    def save(self, *args, **kwargs):
+        # garante 'fim' antes de persistir (quando relevante)
+        if not self.fim and self.status in (StatusAgendamento.CONFIRMADO, StatusAgendamento.FINALIZADO, StatusAgendamento.REALIZADO):
+            self.calcular_fim_pelo_servico()
+        # normaliza status legado
+        if self.status == StatusAgendamento.REALIZADO:
+            self.status = StatusAgendamento.FINALIZADO
         super().save(*args, **kwargs)
 
+    # ----------------- regras de negócio -----------------
+    def finalizar(self, when=None):
+        """
+        Transição CONFIRMADO -> FINALIZADO (idempotente).
+        Aceita `when` para fixar o horário de término, senão infere.
+        """
+        if self.status in (StatusAgendamento.FINALIZADO, StatusAgendamento.REALIZADO):
+            return self  # idempotente
+
+        if self.status != StatusAgendamento.CONFIRMADO:
+            raise ValueError("Apenas agendamentos CONFIRMADOS podem ser finalizados.")
+
+        self._ensure_fim(when=when)
+        self.status = StatusAgendamento.FINALIZADO
+        return self
+
+    def marcar_no_show(self):
+        """
+        Transição CONFIRMADO -> NO_SHOW (idempotente).
+        """
+        if self.status == StatusAgendamento.NO_SHOW:
+            return self  # idempotente
+
+        if self.status != StatusAgendamento.CONFIRMADO:
+            raise ValueError("Apenas agendamentos CONFIRMADOS podem ser marcados como no-show.")
+
+        self.status = StatusAgendamento.NO_SHOW
+        return self
+
+    # ----------------- conflito -----------------
     @staticmethod
-    def existe_conflito(barbeiro, inicio, fim, excluir_id: int | None = None) -> bool:
+    def existe_conflito(barbeiro, inicio, fim, excluir_id: int | None = None, shop=None) -> bool:
+        """
+        Conflito básico: sobreposição [inicio, fim) para o barbeiro.
+        Por padrão considera qualquer status que ocupe a agenda (CONFIRMADO/FINALIZADO/NO_SHOW).
+        Exclui CANCELADO.
+        Se `shop` for passado, limita à barbearia.
+        """
         qs = Agendamento.objects.filter(
             barbeiro=barbeiro,
             inicio__lt=fim,
             fim__gt=inicio,
-        )
+        ).exclude(status=StatusAgendamento.CANCELADO)
+
+        if shop is not None:
+            qs = qs.filter(shop=shop)
         if excluir_id:
             qs = qs.exclude(id=excluir_id)
         return qs.exists()
 
 
+# ----------------- Disponibilidade / Folgas -----------------
 class BarbeiroAvailability(models.Model):
     """Regras semanais (expediente + almoço)."""
     class Weekday(models.IntegerChoices):
@@ -149,37 +218,69 @@ class BarbeiroAvailability(models.Model):
         ]
 
     def gerar_slots(self, dia, barbeiro):
+        """
+        Gera slots do dia com flags de disponibilidade.
+        Usa timezone local e normaliza almoço/folgas/agendamentos em TZ-aware.
+        """
         if not self.is_active:
             return []
-        start_dt = datetime.combine(dia, self.start_time)
-        end_dt   = datetime.combine(dia, self.end_time)
 
-        slots, atual = [], start_dt
-        while atual + timedelta(minutes=self.slot_minutes) <= end_dt:
-            slots.append({"start": atual, "end": atual + timedelta(minutes=self.slot_minutes), "available": True})
-            atual += timedelta(minutes=self.slot_minutes)
+        tz = timezone.get_current_timezone()
 
+        def aware(d0: datetime) -> datetime:
+            return timezone.make_aware(d0, tz) if timezone.is_naive(d0) else d0.astimezone(tz)
+
+        start_dt = aware(datetime.combine(dia, self.start_time))
+        end_dt   = aware(datetime.combine(dia, self.end_time))
+
+        step = timedelta(minutes=self.slot_minutes or 30)
+        slots = []
+        cur = start_dt
+        while cur + step <= end_dt:
+            slots.append({"start": cur, "end": cur + step, "available": True})
+            cur += step
+
+        # almoço
         if self.lunch_start and self.lunch_end:
-            almoco_ini = datetime.combine(dia, self.lunch_start)
-            almoco_fim = datetime.combine(dia, self.lunch_end)
+            almoco_ini = aware(datetime.combine(dia, self.lunch_start))
+            almoco_fim = aware(datetime.combine(dia, self.lunch_end))
             for s in slots:
                 if s["start"] < almoco_fim and s["end"] > almoco_ini:
                     s["available"] = False
                     s["reason"] = "almoco"
 
-        offs = BarbeiroTimeOff.objects.filter(barbeiro=barbeiro, start__date=dia)
-        for o in offs:
-            for s in slots:
-                if s["start"] < o.end and s["end"] > o.start:
+        # folgas do dia (normalizadas)
+        day_start = aware(datetime.combine(dia, time(0, 0)))
+        day_end   = day_start + timedelta(days=1)
+        offs = BarbeiroTimeOff.objects.filter(barbeiro=barbeiro, start__lt=day_end, end__gt=day_start)
+        off_intervals = [(o.start.astimezone(tz), o.end.astimezone(tz)) for o in offs]
+
+        # agendamentos do dia (que ocupam agenda)
+        ags = Agendamento.objects.filter(
+            barbeiro=barbeiro,
+            inicio__lt=day_end,
+            fim__gt=day_start,
+        ).exclude(status=StatusAgendamento.CANCELADO)
+        ag_intervals = [(a.inicio.astimezone(tz), (a.fim or a.inicio).astimezone(tz)) for a in ags]
+
+        # aplica interseções
+        for s in slots:
+            if s.get("available") is False:
+                continue
+            # folgas
+            for st, en in off_intervals:
+                if s["start"] < en and s["end"] > st:
                     s["available"] = False
                     s["reason"] = "folga"
-
-        ags = Agendamento.objects.filter(barbeiro=barbeiro, inicio__date=dia)
-        for ag in ags:
-            for s in slots:
-                if s["start"] < ag.fim and s["end"] > ag.inicio:
+                    break
+            if s.get("available") is False:
+                continue
+            # agendamentos
+            for st, en in ag_intervals:
+                if s["start"] < en and s["end"] > st:
                     s["available"] = False
                     s["reason"] = "ocupado"
+                    break
 
         return slots
 
@@ -207,8 +308,9 @@ class BarbeiroTimeOff(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.barbeiro} off {self.start:%d/%m %H:%M}-{self.end:%H:%M} ({self.reason or '—'})"
+        return f"{self.barbeiro} off {timezone.localtime(self.start):%d/%m %H:%M}-{timezone.localtime(self.end):%H:%M} ({self.reason or '—'})"
 
 
+# aliases
 BarberAvailability = BarbeiroAvailability
 BarberTimeOff = BarbeiroTimeOff

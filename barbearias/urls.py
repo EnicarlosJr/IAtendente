@@ -1,17 +1,20 @@
+# barbearias/urls.py
 from django.urls import path
-from . import views_public  # suas views públicas existentes
-from . import views_admin   # novo arquivo acima
+from . import views, views_admin, views_public  # certifique-se que esses módulos existem
 
 app_name = "barbearias"
 
 urlpatterns = [
-    # PÚBLICO (que você já tinha/tem)
+    # Gestão de usuários (OWNER/MANAGER)
+    path("<slug:shop_slug>/usuarios/", views_admin.usuarios, name="usuarios"),
+    path("<slug:shop_slug>/usuarios/<int:mem_id>/atualizar/", views_admin.usuarios_atualizar, name="usuarios_atualizar"),
+    path("<slug:shop_slug>/usuarios/<int:mem_id>/remover/", views_admin.usuarios_remover, name="usuarios_remover"),
+    path("<slug:shop_slug>/usuarios/adicionar/", views_admin.usuarios_adicionar, name="usuarios_adicionar"),
+
+    # Fluxo de pessoas (OWNER/MANAGER)
+    path("<slug:shop_slug>/fluxo/", views_admin.fluxo, name="fluxo"),
+
+    # Páginas públicas
     path("<slug:shop_slug>/", views_public.intake_shop, name="intake_shop"),
     path("<slug:shop_slug>/<slug:barber_slug>/", views_public.intake_barber, name="intake_barber"),
-
-    # ADMIN (gestão de usuários/membros)
-    path("admin/usuarios/", views_admin.usuarios, name="usuarios"),
-    path("admin/usuarios/convidar/", views_admin.usuarios_convidar, name="usuarios_convidar"),
-    path("admin/usuarios/<int:mem_id>/atualizar/", views_admin.usuarios_atualizar, name="usuarios_atualizar"),
-    path("admin/usuarios/<int:mem_id>/remover/", views_admin.usuarios_remover, name="usuarios_remover"),
 ]

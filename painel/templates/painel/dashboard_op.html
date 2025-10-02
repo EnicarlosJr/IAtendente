@@ -1,0 +1,194 @@
+{% extends "painel/base.html" %}
+{% block title %}Dashboard Operacional{% endblock %}
+{% block header %}Dashboard · Operacional{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-3 sm:px-4 space-y-6">
+
+  <!-- Header -->
+  <section class="card p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <div class="text-xs uppercase tracking-wide text-slate-500">Hoje</div>
+      <h2 class="text-xl font-semibold">{{ base_date|date:"d/m/Y" }} ({{ base_date|date:"l"|capfirst }})</h2>
+      {% if kpis.pendencias|default:0 > 0 %}
+      <a class="mt-1 inline-flex items-center text-xs px-2 py-1 rounded bg-amber-100 text-amber-800 hover:bg-amber-200"
+        href="{% url 'solicitacoes:solicitacoes' shop_slug %}">
+        🔔 Pendências: <strong class="ml-1">{{ kpis.pendencias }}</strong>
+      </a>
+      {% endif %}
+    </div>
+    <div class="flex items-center gap-2">
+      <a class="btn btn-outline" href="{% url 'painel:dashboard_mgmt_slug' shop_slug %}">Visão Gerencial</a>
+      <a class="btn btn-primary"
+        href="{% url 'agendamentos:agenda_dia' shop_slug %}?data={{ base_date|date:'Y-m-d' }}">Abrir agenda</a>
+    </div>
+  </section>
+
+  <!-- 3 cards principais -->
+  <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Ocupação (gauge) -->
+    <div class="card p-4">
+      <div class="section-title mb-2">Ocupação de hoje</div>
+      <div id="opGauge" style="height:220px"></div>
+      <div class="text-xs text-slate-500 mt-2">Percentual de tempo ocupado em relação à janela de trabalho.</div>
+    </div>
+
+    <!-- Timeline (barras finas) -->
+    <div class="card p-4 lg:col-span-2">
+      <div class="section-title mb-2">Linha do tempo do dia</div>
+      <div id="opTimeline" style="height:220px"></div>
+      <div class="flex gap-3 mt-3 text-xs">
+        <span class="inline-flex items-center gap-1"><i class="w-3 h-3 rounded-sm" style="background:#10b981;"></i>
+          Agendamento</span>
+        <span class="inline-flex items-center gap-1"><i class="w-3 h-3 rounded-sm" style="background:#f59e0b;"></i>
+          Solicitação</span>
+        <span class="inline-flex items-center gap-1"><i class="w-3 h-3 rounded-sm" style="background:#94a3b8;"></i>
+          Ocupado</span>
+        <span class="inline-flex items-center gap-1"><i class="w-3 h-3 rounded-sm" style="background:#e2e8f0;"></i>
+          Livre</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Buracos + Heatmap -->
+  <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Buracos próximos -->
+    <div class="card p-4">
+      <div class="section-title mb-2">Buracos nas próximas 3h</div>
+      <ul class="text-sm divide-y divide-slate-100">
+        {% for h in holes %}
+        <li class="py-2 flex items-center justify-between">
+          <div>
+            <div class="font-medium">{{ h.inicio|date:"H:i" }} — {{ h.fim|date:"H:i" }}</div>
+            <div class="text-xs text-slate-500">
+              {{ h.dur_min|default:0 }} min{% if h.slots %} ({{ h.slots }} slots){% endif %}
+            </div>
+          </div>
+          <a class="btn btn-xs btn-outline"
+            href="{% url 'agendamentos:agenda_dia' shop_slug %}?data={{ base_date|date:'Y-m-d' }}#{{ h.inicio|date:'H:i' }}">
+            Preencher
+          </a>
+        </li>
+        {% empty %}
+        <li class="py-4 text-xs text-slate-500">Sem janelas livres no horizonte.</li>
+        {% endfor %}
+      </ul>
+
+    </div>
+
+    <!-- Heatmap semanal -->
+    <div class="card p-4 lg:col-span-2">
+      <div class="section-title mb-2">Heatmap da semana</div>
+      <div id="opHeatmap" style="height:280px"></div>
+      <div class="text-xs text-slate-500 mt-2">Percentual de ocupação por hora/dia (agendamentos + solicitações).</div>
+    </div>
+  </section>
+
+  <!-- Pendências -->
+  <section class="card p-4">
+    <div class="section-title mb-2">Pendências de hoje</div>
+    <ul class="text-sm divide-y divide-slate-100">
+      {% for h in holes %}
+      <li class="py-2 flex items-center justify-between">
+        <div>
+          <div class="font-medium">{{ h.inicio|date:"H:i" }} — {{ h.fim|date:"H:i" }}</div>
+          <div class="text-xs text-slate-500">{{ h.dur_min|default:0 }} min</div>
+        </div>
+        <a class="btn btn-xs btn-outline"
+          href="{% url 'agendamentos:agenda_dia' shop_slug %}?data={{ base_date|date:'Y-m-d' }}#{{ h.inicio|date:'H:i' }}">
+          Preencher
+        </a>
+      </li>
+      {% empty %}
+      <li class="py-4 text-xs text-slate-500">Sem janelas livres no horizonte.</li>
+      {% endfor %}
+    </ul>
+
+  </section>
+</div>
+
+<!-- ECharts -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+
+{# Serialização segura dos arrays/objetos vindos da view #}
+{{ ec_timeline_labels|json_script:"ec_tl_labels" }}
+{{ ec_timeline_items|json_script:"ec_tl_items" }}
+{{ ec_heatmap_x|json_script:"ec_hm_x" }}
+{{ ec_heatmap_y|json_script:"ec_hm_y" }}
+{{ ec_heatmap_data|json_script:"ec_hm_data" }}
+
+<script>
+  const TL_LABELS = JSON.parse(document.getElementById('ec_tl_labels').textContent || '[]');
+  const TL_ITEMS = JSON.parse(document.getElementById('ec_tl_items').textContent || '[]');
+  const HM_X = JSON.parse(document.getElementById('ec_hm_x').textContent || '[]');
+  const HM_Y = JSON.parse(document.getElementById('ec_hm_y').textContent || '[]');
+  const HM_DATA = JSON.parse(document.getElementById('ec_hm_data').textContent || '[]');
+  const OCC = Number({{ kpis.utilizacao_hoje|default_if_none:0|default:0 }}) || 0;
+  
+  // ---------- Gauge (ocupação) ----------
+  const g = echarts.init(document.getElementById('opGauge'));
+  g.setOption({
+    series: [{
+      type: 'gauge',
+      startAngle: 200, endAngle: -20, min: 0, max: 100, splitNumber: 5,
+      progress: { show: true, width: 14 },
+      axisLine: { lineStyle: { width: 14 } },
+      axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
+      detail: { valueAnimation: true, formatter: '{value}%', fontSize: 22, offsetCenter: [0, '60%'] },
+      data: [{ value: OCC }]
+    }]
+  });
+
+  // ---------- Timeline (barras finas coloridas por status) ----------
+  const mapColor = (k) => ({
+    'agendamento': '#10b981',
+    'solicitacao': '#f59e0b',
+    'ocupado': '#94a3b8',
+    'livre': '#e2e8f0'
+  }[k] || '#e2e8f0');
+
+  const tChart = echarts.init(document.getElementById('opTimeline'));
+  tChart.setOption({
+    grid: { left: 8, right: 8, top: 10, bottom: 25 },
+    xAxis: { type: 'category', data: TL_LABELS, axisTick: { show: false }, axisLine: { show: false } },
+    yAxis: { type: 'value', show: false, min: 0, max: 1 },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (p) => {
+        const i = p[0].dataIndex;
+        const it = TL_ITEMS[i] || {};
+        return `<b>${TL_LABELS[i]}</b><br>${it.title || ''}<br><span style="color:#666">(${it.status || it.kind || ''})</span>`;
+      }
+    },
+    series: [{
+      type: 'bar',
+      barWidth: '90%',
+      data: (TL_ITEMS || []).map(() => 1),
+      itemStyle: { color: (params) => mapColor((TL_ITEMS[params.dataIndex] || {}).kind) }
+    }]
+  });
+
+  // ---------- Heatmap semanal ----------
+  const hm = echarts.init(document.getElementById('opHeatmap'));
+  hm.setOption({
+    tooltip: { position: 'top', formatter: (p) => `${HM_Y[p.data[1]]} · ${HM_X[p.data[0]]}: ${p.data[2]}%` },
+    grid: { left: 60, right: 10, top: 10, bottom: 30 },
+    xAxis: { type: 'category', data: HM_X, splitArea: { show: true }, axisTick: { show: false } },
+    yAxis: { type: 'category', data: HM_Y, splitArea: { show: true }, axisTick: { show: false } },
+    visualMap: {
+      min: 0, max: 100, orient: 'horizontal', left: 'center', bottom: 0,
+      inRange: { color: ['#e2e8f0', '#60a5fa', '#10b981'] }
+    },
+    series: [{
+      type: 'heatmap',
+      data: HM_DATA,
+      label: { show: false },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.2)' } }
+    }]
+  });
+
+  // Responsivo
+  window.addEventListener('resize', () => { g.resize(); tChart.resize(); hm.resize(); });
+</script>
+{% endblock %}
