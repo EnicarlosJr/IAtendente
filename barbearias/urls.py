@@ -1,6 +1,6 @@
 # barbearias/urls.py
 from django.urls import path
-from . import views, views_admin, views_public  # certifique-se que esses módulos existem
+from . import views, views_admin, views_public_slots  # certifique-se que esses módulos existem
 
 app_name = "barbearias"
 
@@ -14,7 +14,4 @@ urlpatterns = [
     # Fluxo de pessoas (OWNER/MANAGER)
     path("<slug:shop_slug>/fluxo/", views_admin.fluxo, name="fluxo"),
 
-    # Páginas públicas
-    path("<slug:shop_slug>/", views_public.intake_shop, name="intake_shop"),
-    path("<slug:shop_slug>/<slug:barber_slug>/", views_public.intake_barber, name="intake_barber"),
 ]

@@ -13,7 +13,6 @@ urlpatterns = [
     # -------- PÚBLICO --------
     path("barbearias/", include(("barbearias.urls", "barbearias"), namespace="barbearias")),
     path("pub/", include(("barbearias.urls_public", "public"), namespace="public")),
-
     # -------- SISTEMA --------
     path("", painel_views.home, name="home"),
     path("painel/", include(("painel.urls", "painel"), namespace="painel")),

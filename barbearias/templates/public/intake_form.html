@@ -1,0 +1,217 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{{ shop.nome }} — Solicitar atendimento</title>
+
+  <!-- Estilos dedicados deste fluxo -->
+  <link href="{% static 'css/public_intake.css' %}" rel="stylesheet">
+
+  <!-- Utilitárias Tailwind (CDN) – opcional, apenas para grid utilitária do calendário -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="min-h-screen">
+
+  <!-- Cabeçalho sobre o background com overlay (implementado no CSS) -->
+  <header class="text-center mb-6 px-4">
+    {% if shop.logo_url %}
+      <img src="{{ shop.logo_url }}" alt="{{ shop.nome }}" class="mx-auto h-16 w-16 rounded-2xl object-cover ring-1 ring-black/5" />
+    {% endif %}
+    <h1 class="mt-3 text-3xl font-bold text-white drop-shadow">{{ shop.nome }}</h1>
+    {% if barber %}
+      <p class="text-gray-200 text-sm mt-1">
+        com {{ barber.user.get_full_name|default:barber.user.username }}
+      </p>
+    {% endif %}
+  </header>
+
+  <main class="w-full max-w-md mx-auto px-4 pb-12">
+    <div class="card" data-shop-slug="{{ shop.slug }}"
+         data-barber-slug="{% if barber %}{{ barber.public_slug }}{% endif %}">
+
+      <!-- Stepper -->
+      <div class="mb-6">
+        <div class="flex justify-between text-[11px] font-medium text-gray-600">
+          <span class="step-label step-1 step-is-active">1. Dados</span>
+          <span class="step-label step-2">2. Serviço</span>
+          <span class="step-label step-3">3. Data & Hora</span>
+          <span class="step-label step-4">4. Revisão</span>
+        </div>
+        <div class="mt-2 h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+          <div id="progressBar" class="h-1 bg-emerald-500 w-1/4 transition-all"></div>
+        </div>
+      </div>
+
+      <!-- Mensagens Django -->
+      {% if messages %}
+        <ul class="messages mb-4">
+          {% for m in messages %}
+            <li class="{% if m.tags == 'error' %}error{% else %}success{% endif %}">{{ m }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <!-- Form -->
+      <form id="publicForm" method="post" novalidate class="space-y-6">
+        {% csrf_token %}
+        <input type="hidden" name="_submit" id="_submit" value="0" />
+
+        <!-- Step 1 -->
+        <section data-step="1" class="step space-y-4">
+          <div>
+            <label class="block text-sm font-medium">Seu nome (opcional)</label>
+            <input name="nome" class="input" placeholder="Como gostaria de ser chamado?" autocomplete="name" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium">WhatsApp <span class="text-rose-500">*</span></label>
+            <input id="telefone" name="telefone" required inputmode="tel" autocomplete="tel" class="input"
+                   placeholder="(DDD) 9 9999-9999" />
+            <p class="mt-1 text-xs text-gray-500">Usaremos este número para confirmar o agendamento.</p>
+          </div>
+          <button type="button" class="btn-primary next" data-next="2">Continuar</button>
+        </section>
+
+        <!-- Step 2 -->
+        <section data-step="2" class="step hidden space-y-4">
+          <div>
+            <label class="block text-sm font-medium">Serviço <span class="text-rose-500">*</span></label>
+            <select id="servico" name="servico_id" required class="input">
+              <option value="">Selecione…</option>
+              {% for s in servicos %}
+                <option value="{{ s.id }}" data-duracao="{{ s.duracao_min }}">{{ s.nome }} — {{ s.duracao_min }} min</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          {% if servicos %}
+          <div class="flex flex-wrap gap-2">
+            {% for s in servicos|slice:":8" %}
+              <button type="button"
+                      class="chip border rounded-full px-3 py-1 text-xs hover:bg-gray-50"
+                      data-value="{{ s.id }}" data-duracao="{{ s.duracao_min }}">
+                {{ s.nome }}
+              </button>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+          <div class="flex items-center justify-between">
+            <button type="button" class="btn-ghost prev" data-prev="1">Voltar</button>
+            <button type="button" class="btn-primary next" id="toStep3" data-next="3" disabled>Escolher data</button>
+          </div>
+        </section>
+
+        <!-- Step 3 -->
+        <section data-step="3" class="step hidden space-y-5">
+          <!-- Calendário -->
+          <div class="rounded-2xl border p-3 bg-white/70">
+            <div class="flex items-center justify-between mb-2">
+              <button type="button" id="prevMonth" class="px-2 py-1 text-sm border rounded-lg hover:bg-gray-50">&larr;</button>
+              <div id="monthLabel" class="text-sm font-semibold">Mês</div>
+              <button type="button" id="nextMonth" class="px-2 py-1 text-sm border rounded-lg hover:bg-gray-50">&rarr;</button>
+            </div>
+
+            <div class="grid grid-cols-7 gap-1 text-center text-[11px] text-gray-500">
+              <div>Dom</div><div>Seg</div><div>Ter</div><div>Qua</div><div>Qui</div><div>Sex</div><div>Sáb</div>
+            </div>
+            <div id="calendarGrid" class="mt-2 grid grid-cols-7 gap-1"></div>
+
+            <p class="mt-2 text-xs text-gray-500">Dias sem vagas ficam desabilitados.</p>
+          </div>
+
+          <!-- Slots -->
+          <div>
+            <label class="block text-sm font-medium mb-2">Horários disponíveis</label>
+
+            <div id="slotsWrap" class="min-h-14" aria-live="polite">
+              <!-- SKELETON visível durante carregamento -->
+              <div id="slotsSkeleton">
+                <div class="slot-tabs" aria-hidden="true">
+                  <div class="slot-tab">Manhã</div>
+                  <div class="slot-tab">Tarde</div>
+                  <div class="slot-tab">Noite</div>
+                </div>
+                <div class="hour-section" aria-hidden="true">
+                  <div class="hour-summary">
+                    <div class="label shimmer w-20 h-4 rounded"></div>
+                    <span class="count shimmer w-10 h-4 rounded"></span>
+                  </div>
+                  <div class="hour-content">
+                    <div class="slot-chips">
+                      <div class="shimmer h-9 w-16 rounded-lg"></div>
+                      <div class="shimmer h-9 w-16 rounded-lg"></div>
+                      <div class="shimmer h-9 w-16 rounded-lg"></div>
+                      <div class="shimmer h-9 w-16 rounded-lg"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Onde as abas e acordeões reais serão injetados -->
+              <div id="slotsGrid"></div>
+
+              <p id="slotsEmpty" class="text-sm text-gray-500 hidden">Selecione um dia para ver os horários.</p>
+
+              <div id="slotsErr" class="hidden">
+                Não foi possível carregar os horários. <span class="font-mono" id="errDetail"></span>
+              </div>
+            </div>
+
+            <input type="hidden" name="inicio" id="inicio" />
+          </div>
+
+          <div class="flex items-center justify-between">
+            <button type="button" class="btn-ghost prev" data-prev="2">Voltar</button>
+            <button type="button" class="btn-primary next" id="toStep4" data-next="4" disabled>Revisar</button>
+          </div>
+        </section>
+
+        <!-- Step 4 -->
+        <section data-step="4" class="step hidden space-y-4">
+          <div>
+            <label class="block text-sm font-medium">Observações</label>
+            <textarea name="observacoes" rows="3" class="input"
+                      placeholder="Ex.: corte com degradê; não posso depois das 18h"></textarea>
+          </div>
+
+          <div class="rounded-xl bg-emerald-50 p-3 text-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-gray-600">Serviço</span> <span id="resServico" class="font-medium">—</span>
+            </div>
+            <div class="mt-1 flex items-center justify-between">
+              <span class="text-gray-600">Duração</span> <span id="resDuracao" class="font-medium">—</span>
+            </div>
+            <div class="mt-1 flex items-center justify-between">
+              <span class="text-gray-600">Data & hora</span> <span id="resDataHora" class="font-medium">—</span>
+            </div>
+          </div>
+
+          <button class="btn-primary" id="submitBtn">Enviar solicitação</button>
+          <button type="button" class="mt-2 text-xs text-gray-500 underline prev" data-prev="3">Voltar</button>
+        </section>
+
+        <!-- Fallback sem JS -->
+        <noscript>
+          <div class="mt-4 p-3 border rounded-xl bg-amber-50 text-sm">
+            Seu navegador está sem JavaScript. Escolha manualmente:
+            <div class="mt-2">
+              <label class="block text-sm font-medium mb-1">Data e hora</label>
+              <input type="datetime-local" name="inicio" class="input" />
+            </div>
+          </div>
+        </noscript>
+      </form>
+    </div>
+  </main>
+
+  <footer class="text-center text-xs text-white/70 mb-4">
+    © {{ shop.nome }} — Agendamento rápido e seguro
+  </footer>
+
+  <!-- Lógica do fluxo (abas + acordeão + calendário) -->
+  <script src="{% static 'js/public_intake.js' %}"></script>
+</body>
+</html>

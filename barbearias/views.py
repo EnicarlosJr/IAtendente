@@ -7,13 +7,14 @@ from django.http import HttpResponseBadRequest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 
+from barbearias.forms_public import PublicRequestForm
 from core.access import require_shop_member
 
 from .models import BarberShop, Membership, MembershipRole
 from .utils import get_default_shop_for
 from .permissions import get_shop_from_request
 
-from .forms import ShopSignupForm, PublicRequestForm   # 👈 garanta esses imports
+from .forms import ShopSignupForm   # 👈 garanta esses imports
 from servicos.models import Servico
 
 User = get_user_model()
