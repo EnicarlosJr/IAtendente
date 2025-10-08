@@ -2,6 +2,7 @@
 
 import logging
 from decimal import Decimal
+from typing import Mapping, Optional
 
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -27,6 +28,7 @@ from servicos.models import Servico
 from solicitacoes.helpers import criar_agendamento_from_solicitacao
 from solicitacoes.utils import shop_post_view
 from .models import Solicitacao, SolicitacaoStatus
+from .webhooks import _disparar_webhook_negacao, _disparar_webhook_confirmacao
 
 logger = logging.getLogger(__name__)
 
@@ -128,38 +130,6 @@ def _criar_agendamento_para_solicitacao(s: Solicitacao, barbeiro=None) -> Agenda
     ag.save()
     return ag
 
-def _disparar_webhook_confirmacao(s: Solicitacao):
-    callback_url = s.callback_url or getattr(settings, "OUTBOUND_CONFIRMATION_WEBHOOK", None)
-    if not callback_url:
-        logger.info("[Solicitacao] CONFIRMADA sem callback_url (sol=%s)", s.pk)
-        return
-
-    telefone = s.telefone or (getattr(s.cliente, "telefone", None))
-    payload = {
-        "evento": "solicitacao_confirmada",
-        "ok": True,
-        "timestamp": timezone.now().isoformat(),
-        "solicitacao_id": s.pk,
-        "id_externo": s.id_externo,
-        "status": s.status,
-        "inicio": s.inicio.isoformat() if s.inicio else None,
-        "fim": s.fim.isoformat() if s.fim else None,
-        "servico": s.servico_label,
-        "telefone": telefone,
-        "nome": s.nome or getattr(getattr(s, "cliente", None), "nome", None),
-        "mensagem": "Sua solicitação foi confirmada.",
-    }
-    headers = {"Content-Type": "application/json", "X-Webhook-Token": getattr(settings, "OUTBOUND_WEBHOOK_TOKEN", "")}
-
-    def _send(url, body, hdrs):
-        try:
-            resp = requests.post(url, json=body, headers=hdrs, timeout=8)
-            resp.raise_for_status()
-            logger.info("[Solicitacao] webhook OK (sol=%s)", s.pk)
-        except Exception as e:
-            logger.exception("[Solicitacao] webhook falhou (sol=%s): %s", s.pk, e)
-
-    transaction.on_commit(lambda: _send(callback_url, payload, headers))
 
 # ===================== Listagem =====================
 @require_shop_member
@@ -294,7 +264,7 @@ def detalhe(request, shop_slug, pk):
 @transaction.atomic
 def alterar_status(request, shop_slug, pk: int):
     shop = _get_shop_for_user(request, shop_slug)
-    s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
+    s = get_object_or_404(_solicitacao_qs(shop).select_for_update(), pk=pk)
     if not _barber_can_act(request, s):
         return HttpResponseForbidden("Você não tem permissão para alterar esta solicitação.")
 
@@ -304,8 +274,10 @@ def alterar_status(request, shop_slug, pk: int):
         return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
 
     if novo == SolicitacaoStatus.NEGADA:
-        motivo = (request.POST.get("motivo") or "").strip()
+        motivo = (request.POST.get("motivo") or "").strip() or None
         s.negar(motivo=motivo)
+        # dispara webhook de negação após commit
+        _disparar_webhook_negacao(s, motivo=motivo)
         messages.success(request, "Solicitação negada.")
     else:
         s.status = SolicitacaoStatus.PENDENTE
@@ -313,6 +285,7 @@ def alterar_status(request, shop_slug, pk: int):
         messages.success(request, "Solicitação reaberta.")
 
     return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")
+
 
 def _resolve_barbeiro_para_agendamento(request, shop: BarberShop, solicitacao: Solicitacao):
     User = get_user_model()
@@ -439,16 +412,29 @@ def confirmar_solicitacao(request, shop_slug, pk: int):
 @transaction.atomic
 def recusar_solicitacao(request, shop_slug, pk: int):
     shop = _get_shop_for_user(request, shop_slug)
-    s = get_object_or_404(_solicitacao_qs(shop), pk=pk)
+    # lock na linha para evitar corrida com outras ações
+    s = get_object_or_404(_solicitacao_qs(shop).select_for_update(), pk=pk)
 
     if not _barber_can_act(request, s):
+        if _wants_json(request):
+            return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
         return HttpResponseForbidden("Você não tem permissão para recusar esta solicitação.")
 
-    motivo = (request.POST.get("motivo") or "").strip()
+    motivo = (request.POST.get("motivo") or "").strip() or None
+
+    # altera status conforme sua lógica de domínio
     s.negar(motivo=motivo)
 
+    # dispara webhook de negação após o commit da transação
+    _disparar_webhook_negacao(s, motivo=motivo)
+
     if _wants_json(request):
-        return JsonResponse({"ok": True, "id": s.id, "status": s.status, "motivo": motivo or None})
+        return JsonResponse({
+            "ok": True,
+            "id": s.id,
+            "status": s.status,
+            "motivo": motivo
+        })
 
     messages.success(request, "Solicitação negada.")
     return redirect(request.META.get("HTTP_REFERER") or "solicitacoes:solicitacoes")

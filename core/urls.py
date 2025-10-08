@@ -13,7 +13,6 @@ urlpatterns = [
     # -------- PÚBLICO --------
     path("barbearias/", include(("barbearias.urls", "barbearias"), namespace="barbearias")),
     path("pub/", include(("barbearias.urls_public", "public"), namespace="public")),
-
     # -------- SISTEMA --------
     path("", painel_views.home, name="home"),
     path("painel/", include(("painel.urls", "painel"), namespace="painel")),
@@ -29,6 +28,7 @@ urlpatterns = [
 
     # -------- AUTENTICAÇÃO --------
     path("conta/", include(("barbearias.urls_auth", "barbearias_auth"), namespace="barb_auth")),
+    path("api/ai/", include(("ai_api.urls", "ai_api"), namespace="ai_api")),
 ]
 
 if settings.DEBUG:
