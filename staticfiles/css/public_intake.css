@@ -1,0 +1,149 @@
+/* === Public Intake (somente intake_form.html) — v2 === */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root{
+  --emerald:#10b981;
+  --emerald-600:#059669;
+  --emerald-700:#047857;
+  --mint:#ecfdf5;
+  --ring:#a7f3d0;
+  --gray-25:#fcfcfd;
+  --gray-50:#f9fafb;
+  --gray-100:#f3f4f6;
+  --gray-200:#e5e7eb;
+  --gray-300:#d1d5db;
+  --gray-400:#9ca3af;
+  --gray-600:#4b5563;
+  --gray-800:#1f2937;
+  --radius:18px;
+  --shadow:0 12px 30px rgba(0,0,0,.10);
+  --transition:all .22s ease;
+}
+
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  color:var(--gray-800);
+  background:url('/static/img/barbershop-bg.jpg') center/cover no-repeat fixed;
+  position:relative;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+body::before{
+  content:'';
+  position:absolute; inset:0;
+  background:rgba(0,0,0,.54);
+  backdrop-filter:blur(4px);
+  z-index:0;
+}
+header,main,.card,footer{position:relative; z-index:1}
+
+.card{
+  background:rgba(255,255,255,.92);
+  backdrop-filter:blur(8px);
+  border-radius:calc(var(--radius) * 1.1);
+  box-shadow:var(--shadow);
+  border:1px solid rgba(255,255,255,.6);
+  padding:1.5rem;
+}
+
+/* Inputs + Botões */
+.input{
+  width:100%; border:1px solid var(--gray-200); border-radius:14px;
+  padding:.7rem .9rem; font-size:.98rem; transition:var(--transition); background:#fff;
+}
+.input:focus{ outline:none; border-color:var(--emerald); box-shadow:0 0 0 3px var(--ring); }
+
+.btn-primary{
+  background:var(--emerald); color:#fff; border:0; border-radius:14px;
+  padding:.8rem 1.1rem; font-weight:800; width:100%; transition:var(--transition);
+}
+.btn-primary:hover{ background:var(--emerald-600) }
+.btn-primary:disabled{ opacity:.4; cursor:not-allowed }
+.btn-ghost{
+  background:#fff; color:var(--gray-800); border:1px solid var(--gray-200);
+  border-radius:14px; padding:.65rem 1rem; transition:var(--transition);
+}
+.btn-ghost:hover{ background:var(--gray-50) }
+
+/* Stepper */
+.step-label{ text-transform:uppercase; letter-spacing:.02em; font-size:.7rem; color:var(--gray-400) }
+.step-is-active{ color:var(--emerald-700) !important; font-weight:800 }
+
+/* Calendário */
+.day-btn{
+  border:1px solid var(--gray-200); border-radius:12px; padding:.55rem 0;
+  font-size:.9rem; background:#fff; transition:var(--transition); width:100%;
+}
+.day-btn:hover:not(:disabled){ background:var(--gray-50) }
+.day-btn:disabled{ opacity:.35; cursor:not-allowed }
+.day-btn.active{ background:var(--mint); color:var(--emerald-700); border-color:var(--emerald); box-shadow:0 0 0 3px var(--ring) }
+
+/* ---------- Slots v2 ---------- */
+
+/* Container rolável com altura controlada (evita página gigante) */
+#slotsWrap{
+  margin-top:.25rem;
+  max-height: 340px;
+  overflow: hidden;   /* fechado por padrão até ter conteúdo */
+}
+#slotsWrap.ready{
+  overflow:auto;
+  scroll-behavior:smooth;
+  overscroll-behavior:contain;
+  background:#fff;
+  border:1px solid var(--gray-100);
+  border-radius:14px;
+  padding:.5rem;
+}
+
+/* Abas por período */
+.slot-tabs{
+  display:flex; gap:.5rem; margin-bottom:.5rem; position:sticky; top:0; z-index:2;
+  background:#fff; padding:.25rem; border-radius:12px; border:1px solid var(--gray-100);
+}
+.slot-tab{
+  flex:1; text-align:center; font-weight:700; font-size:.86rem; padding:.5rem .6rem;
+  border-radius:10px; border:1px solid var(--gray-200); background:#fff;
+  transition:var(--transition); cursor:pointer;
+}
+.slot-tab:hover{ background:var(--gray-50) }
+.slot-tab.active{ background:var(--mint); color:var(--emerald-700); border-color:var(--emerald) }
+
+/* Acordeões por hora */
+.hour-section{ border:1px solid var(--gray-100); border-radius:12px; margin-bottom:.5rem; overflow:hidden; background:#fff }
+.hour-summary{
+  display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+  padding:.55rem .75rem; cursor:pointer; user-select:none;
+  background:linear-gradient(180deg, #fff, #fafafa);
+}
+.hour-summary .label{ font-weight:800; font-size:.9rem; color:#111827 }
+.hour-summary .count{ font-size:.78rem; color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0;
+  padding:.15rem .5rem; border-radius:999px; font-weight:700 }
+.hour-summary:hover{ background:#f9fafb }
+.hour-content{ padding:.6rem .6rem .75rem }
+
+/* Flex chips de horários (nunca deixa “buracos” como no grid) */
+.slot-chips{
+  display:flex; flex-wrap:wrap; gap:.5rem;
+}
+.slot-btn{
+  border:1px solid var(--gray-200); border-radius:12px; padding:.55rem .8rem;
+  font-size:.92rem; background:#fff; transition:var(--transition); text-align:center;
+}
+.slot-btn:hover{ background:#f0fdf4; border-color:var(--emerald) }
+.slot-btn.selected{
+  background:var(--emerald-600); color:#fff; border-color:var(--emerald-700);
+  box-shadow:0 0 0 3px var(--ring); transform:translateY(-1px);
+}
+
+/* Estados */
+#slotsEmpty{ padding:.6rem .75rem; background:#f9fafb; border:1px dashed var(--gray-300); border-radius:12px }
+#slotsErr{ padding:.6rem .75rem; background:#fef2f2; border:1px solid #fecaca; border-radius:12px; color:#b91c1c }
+
+/* Responsivo */
+@media (max-width: 480px){
+  .card{ padding:1.1rem }
+  .slot-tab{ font-size:.82rem; padding:.45rem .5rem }
+}
