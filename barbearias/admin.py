@@ -2,12 +2,26 @@ from django.contrib import admin
 from .models import BarberShop, BarberProfile, Membership, MembershipRole
 
 
+# admin.py
+from django.contrib import admin
+from django import forms
+from .models import BarberShop
+
+class BarberShopAdminForm(forms.ModelForm):
+    class Meta:
+        model = BarberShop
+        fields = "__all__"
+        widgets = {
+            "api_key": forms.PasswordInput(render_value=True),  
+        }
+
 @admin.register(BarberShop)
 class BarberShopAdmin(admin.ModelAdmin):
-    list_display = ("nome", "telefone", "owner", "created_at")
-    search_fields = ("nome", "telefone", "owner__username", "owner__email")
-    prepopulated_fields = {"slug": ("nome",)}
-    ordering = ("nome",)
+    form = BarberShopAdminForm
+    list_display = ("nome", "slug", "instance", "owner")
+    search_fields = ("nome", "slug", "instance", "owner__username")
+    list_filter = ("timezone",)
+    readonly_fields = ()
 
 
 @admin.register(BarberProfile)

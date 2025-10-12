@@ -8,8 +8,7 @@ class BarberShop(models.Model):
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        null=True, blank=True,
         related_name="owned_shops",
     )
     nome = models.CharField(max_length=120)
@@ -17,6 +16,32 @@ class BarberShop(models.Model):
     telefone = models.CharField(max_length=32, blank=True)
     timezone = models.CharField(max_length=64, default="America/Sao_Paulo")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Configuração externa pelo cliente:
+    instance = models.CharField(
+        max_length=120,
+        blank=True, null=True,
+        db_index=True,
+        help_text="Identificador externo da instância (ex.: provedor/whatsapp)."
+    )
+    api_key = models.CharField(
+        max_length=255,
+        blank=True, null=True,
+        help_text="Chave de API fornecida pelo cliente/serviço externo.",
+    )
+
+    class Meta:
+        ordering = ["nome"]
+
+
+    def __str__(self):
+        return self.nome
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.nome)
+        super().save(*args, **kwargs)
+
 
     class Meta:
         ordering = ["nome"]
@@ -28,7 +53,6 @@ class BarberShop(models.Model):
         if not self.slug:
             self.slug = slugify(self.nome)
         super().save(*args, **kwargs)
-
 
 class BarberProfile(models.Model):
     user = models.ForeignKey(

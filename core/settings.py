@@ -163,6 +163,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"   # destino do collectstatic
 
+
 # Somente a pasta global de origem:
 STATICFILES_DIRS = [ BASE_DIR / "static" ]
 
